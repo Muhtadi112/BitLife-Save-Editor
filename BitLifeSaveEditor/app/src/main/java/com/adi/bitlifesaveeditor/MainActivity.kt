@@ -29,6 +29,59 @@ private val Panel = Color(0xFF151927)
 private val Accent = Color(0xFF9B7BFF)
 private val Muted = Color(0xFF9AA3B7)
 
+private data class MarkerHit(val name: String, val offset: Int, val context: String, val hex: String)
+
+private fun findBytes(data: ByteArray, pattern: ByteArray): List<Int> {
+    if (pattern.isEmpty() || pattern.size > data.size) return emptyList()
+    val hits = mutableListOf<Int>()
+    var i = 0
+    while (i <= data.size - pattern.size) {
+        var match = true
+        for (j in pattern.indices) {
+            if (data[i + j] != pattern[j]) { match = false; break }
+        }
+        if (match) {
+            hits += i
+            i += pattern.size
+        } else i++
+    }
+    return hits
+}
+
+private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
+    val names = listOf(
+        "BankBalance", "SimFinances", "Att_money", "Life3", "Hero", "World",
+        "Father", "Mother", "Sibling", "Child", "Lover",
+        "_HouseArray", "_CarArray", "_AircraftArray", "_WatercraftArray"
+    )
+    val hits = mutableListOf<MarkerHit>()
+    for (name in names) {
+        val pattern = name.toByteArray(Charsets.US_ASCII)
+        for (offset in findBytes(data, pattern).take(20)) {
+            val start = (offset - 24).coerceAtLeast(0)
+            val end = (offset + pattern.size + 40).coerceAtMost(data.size)
+            val slice = data.copyOfRange(start, end)
+            val printable = slice.map { b ->
+                val c = b.toInt() and 0xff
+                if (c in 32..126) c.toChar() else '.'
+            }.joinToString("")
+            val hex = slice.take(48).joinToString(" ") { "%02X".format(it.toInt() and 0xff) }
+            hits += MarkerHit(name, offset, printable, hex)
+        }
+    }
+    val summary = buildString {
+        appendLine("Binary scan selesai.")
+        appendLine("Total ukuran: ${data.size} byte")
+        appendLine("Rentang byte: 0x00000000–0x${(data.size - 1).coerceAtLeast(0).toString(16).uppercase()}")
+        appendLine("Signature awal: " + data.take(16).joinToString(" ") { "%02X".format(it.toInt() and 0xff) })
+        appendLine("Hit marker: ${hits.size}")
+        appendLine()
+        appendLine("PENTING: offset di bawah adalah lokasi teks field, bukan otomatis lokasi nilai saldo.")
+        appendLine("Belum ada nilai yang diubah.")
+    }
+    return hits.sortedBy { it.offset } to summary
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +95,7 @@ private fun EditorHome() {
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var fileName by remember { mutableStateOf("Belum ada save dipilih") }
     var report by remember { mutableStateOf("Import savedLife.data untuk mulai pemeriksaan.") }
+    var hits by remember { mutableStateOf<List<MarkerHit>>(emptyList()) }
     var size by remember { mutableStateOf(0L) }
     var sha by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -56,18 +110,14 @@ private fun EditorHome() {
                     size = bytes.size.toLong()
                     fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
                     sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-                    val ascii = bytes.toString(Charsets.ISO_8859_1)
-                    val markers = listOf("Life3", "SimFinances", "BankBalance", "Att_money", "Hero", "World", "Father", "Mother", "Sibling", "Child", "Lover")
-                    val found = markers.filter { ascii.contains(it) }
-                    val header = bytes.take(48).joinToString(" ") { "%02X".format(it) }
+                    val result = analyzeBinary(bytes)
+                    hits = result.first
                     report = buildString {
-                        appendLine("Pemeriksaan read-only selesai.")
-                        appendLine("Ukuran: ${bytes.size} byte (${"%.2f".format(bytes.size / 1024.0 / 1024.0)} MiB)")
+                        append(result.second)
                         appendLine("SHA-256: $sha")
-                        appendLine("Marker yang ditemukan: ${if (found.isEmpty()) "tidak ada" else found.joinToString(", ")}")
-                        appendLine("Header 48 byte: $header")
                         appendLine()
-                        append("Catatan: marker hanya menunjukkan teks yang tertanam di binary; ini belum memetakan nilai saldo atau offset aman.")
+                        appendLine("Jumlah marker unik: ${hits.map { it.name }.distinct().size}")
+                        append("Sumber dibaca secara read-only.")
                     }
                 } ?: run { report = "Gagal membaca file." }
             } catch (e: Exception) {
@@ -109,25 +159,24 @@ private fun EditorHome() {
             }
         }
         Spacer(Modifier.height(16.dp))
-        Text("EDITOR MODULES", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Text("ANALYSIS REPORT", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
         Spacer(Modifier.height(8.dp))
-        listOf("Money Editor" to "Belum aktif — perlu parser BinaryFormatter terverifikasi", "Age & Character Stats" to "Menunggu pemetaan struktur save", "Family & Relationships" to "Menunggu pemetaan struktur save", "Career, Education & Assets" to "Menunggu pemetaan struktur save").forEach { (title, subtitle) ->
-            Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
-                Column(Modifier.padding(14.dp)) {
-                    Text(title, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(subtitle, color = Muted, fontSize = 11.sp)
+        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
+            Text(if (busy) "Menganalisis binary…" else report, modifier = Modifier.padding(16.dp), color = Color(0xFFD9DEEA), fontSize = 12.sp, lineHeight = 18.sp)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("FIELD MARKERS · ${hits.size}", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        hits.forEach { hit ->
+            Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(12.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(hit.name, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Offset: 0x${hit.offset.toString(16).uppercase()} (${hit.offset})", color = Accent, fontSize = 11.sp)
+                    Text(hit.context, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                    Text("HEX: ${hit.hex}", color = Color(0xFFD9DEEA), fontSize = 9.sp, lineHeight = 13.sp)
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
-            Column(Modifier.padding(16.dp)) {
-                Text("ANALYSIS REPORT", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text(if (busy) "Membaca file…" else report, color = Color(0xFFD9DEEA), fontSize = 12.sp, lineHeight = 18.sp)
-            }
-        }
         Spacer(Modifier.height(18.dp))
-        Text("Alpha 0.1 · Read-only build · Tidak mengubah save asli", color = Muted, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Alpha 0.2 · Binary marker analysis · Read-only · Save asli aman", color = Muted, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
