@@ -13,6 +13,11 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: alpha-0.2-development
+          fetch-depth: 0
       - name: Compare targeted finance structures
         shell: bash
         run: |
