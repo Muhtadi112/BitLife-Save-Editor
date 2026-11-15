@@ -34,6 +34,20 @@ private val Good = Color(0xFF69D6A4)
 
 private data class BalanceSlot(val offset: Int, val value: Double, val markerOffset: Int)
 
+// Accept plain digits and common grouped formats such as 9,876,543 or 9.876.543.
+private fun parseBalanceAmount(raw: String): Double? {
+    val value = raw.trim().replace(" ", "")
+    if (value.isEmpty()) return null
+    val normalized = when {
+        Regex("^[0-9]{1,3}(,[0-9]{3})+(\\\\.[0-9]+)?$").matches(value) -> value.replace(",", "")
+        Regex("^[0-9]{1,3}(\\\\.[0-9]{3})+(,[0-9]+)?$").matches(value) -> value.replace(".", "").replace(",", ".")
+        value.count { it == ',' } > 1 -> value.replace(",", "")
+        value.contains(',') && !value.contains('.') -> value.replace(',', '.')
+        else -> value
+    }
+    return normalized.toDoubleOrNull()
+}
+
 private fun findBytes(data: ByteArray, pattern: ByteArray): List<Int> {
     if (pattern.isEmpty() || pattern.size > data.size) return emptyList()
     val hits = mutableListOf<Int>()
@@ -55,7 +69,7 @@ private fun detectBalanceSlot(data: ByteArray): BalanceSlot? {
         val offset = markerOffset + 19
         if (offset < 0 || offset + 8 > data.size) return@mapNotNull null
         val value = ByteBuffer.wrap(data, offset, 8).order(ByteOrder.LITTLE_ENDIAN).double
-        if (value.isFinite() && value >= 0.0 && value <= 1.0e15) BalanceSlot(offset, value, markerOffset) else null
+        if (value.isFinite() && value >= 0.0 && value <= 1.0e18) BalanceSlot(offset, value, markerOffset) else null
     }
     return matches.distinctBy { it.offset }.singleOrNull()
 }
@@ -227,9 +241,9 @@ private fun EditorHome() {
                         Spacer(Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                val amount = balanceInput.trim().replace(",", ".").toDoubleOrNull()
+                                val amount = parseBalanceAmount(balanceInput)
                                 val original = sourceBytes
-                                if (amount == null || !amount.isFinite() || amount < 0.0 || amount > 1.0e15 || original == null) {
+                                if (amount == null || !amount.isFinite() || amount < 0.0 || amount > 1.0e18 || original == null) {
                                     editStatus = "Nominal tidak valid."
                                 } else {
                                     val patched = original.copyOf()
