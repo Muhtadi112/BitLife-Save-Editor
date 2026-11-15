@@ -25,3 +25,8 @@ The workflow uses JDK 17 and Gradle 8.9, then runs `assembleDebug`.
 Open this folder in Android Studio (recent version), use JDK 17, and run `gradle assembleDebug` with Gradle 8.9 or compatible. APK output: `app/build/outputs/apk/debug/app-debug.apk`.
 
 Compile SDK 35, min SDK 26, target SDK 35. The app has no network permission and no internet dependency at runtime. GitHub is used only as a cloud build service.
+
+
+## Alpha 0.2 development
+
+Adds offline binary marker scanning and offset/context reporting. This build remains read-only: it does not modify serialized save values until field types and offsets are verified.
