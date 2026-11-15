@@ -111,12 +111,13 @@ private fun EditorHome() {
                     fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
                     sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
                     val result = analyzeBinary(bytes)
-                    hits = result.first
+                    val foundHits = result.first
+                    hits = foundHits
                     report = buildString {
                         append(result.second)
                         appendLine("SHA-256: $sha")
                         appendLine()
-                        appendLine("Jumlah marker unik: ${hits.map { it.name }.distinct().size}")
+                        appendLine("Jumlah marker unik: ${foundHits.map { it.name }.distinct().size}")
                         append("Sumber dibaca secara read-only.")
                     }
                 } ?: run { report = "Gagal membaca file." }
