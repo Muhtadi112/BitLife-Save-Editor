@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.security.MessageDigest
@@ -192,6 +194,20 @@ private fun EditorHome() {
     var size by remember { mutableStateOf(0L) }
     var sha by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val clipboardManager = LocalClipboardManager.current
+    val visibleReport = remember(report, searchQuery) {
+        if (searchQuery.isBlank()) report else report.lineSequence()
+            .filter { it.contains(searchQuery, ignoreCase = true) }
+            .joinToString("\\n")
+    }
+    val visibleHits = remember(hits, searchQuery) {
+        if (searchQuery.isBlank()) hits else hits.filter {
+            it.name.contains(searchQuery, true) || it.context.contains(searchQuery, true) ||
+                it.hex.contains(searchQuery, true) || it.offset.toString().contains(searchQuery, true) ||
+                "0x${it.offset.toString(16)}".contains(searchQuery, true)
+        }
+    }
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -253,14 +269,40 @@ private fun EditorHome() {
             }
         }
         Spacer(Modifier.height(16.dp))
+        Text("PENCARIAN", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Cari teks, field, offset, atau angka") },
+            placeholder = { Text("Contoh: BankBalance / 1.000.000.000 / F2A3") }
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { clipboardManager.setText(AnnotatedString(visibleReport)) },
+                enabled = report.isNotBlank() && visibleReport.isNotBlank(),
+                modifier = Modifier.weight(1f)
+            ) { Text("Salin hasil laporan") }
+            OutlinedButton(
+                onClick = { clipboardManager.setText(AnnotatedString(visibleHits.joinToString("\\n\\n") { "${it.name}\\nOffset: 0x${it.offset.toString(16).uppercase()} (${it.offset})\\n${it.context}\\nHEX: ${it.hex}" })) },
+                enabled = visibleHits.isNotEmpty(),
+                modifier = Modifier.weight(1f)
+            ) { Text("Salin marker") }
+        }
+        Spacer(Modifier.height(16.dp))
         Text("ANALYSIS REPORT", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
         Spacer(Modifier.height(8.dp))
         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
-            Text(if (busy) "Menganalisis binary…" else report, modifier = Modifier.padding(16.dp), color = Color(0xFFD9DEEA), fontSize = 12.sp, lineHeight = 18.sp)
+            Text(
+                if (busy) "Menganalisis binary…" else if (searchQuery.isBlank()) report else visibleReport.ifBlank { "Tidak ada baris laporan yang cocok dengan pencarian." },
+                modifier = Modifier.padding(16.dp), color = Color(0xFFD9DEEA), fontSize = 12.sp, lineHeight = 18.sp
+            )
         }
         Spacer(Modifier.height(16.dp))
-        Text("FIELD MARKERS · ${hits.size}", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-        hits.forEach { hit ->
+        Text("FIELD MARKERS · ${visibleHits.size} / ${hits.size}", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        visibleHits.forEach { hit ->
             Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(12.dp)) {
                 Column(Modifier.padding(12.dp)) {
                     Text(hit.name, color = Color.White, fontWeight = FontWeight.Bold)
