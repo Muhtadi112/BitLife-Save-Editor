@@ -128,7 +128,23 @@ private fun EditorHome() {
     var sourceBytes by remember { mutableStateOf<ByteArray?>(null) }
     var editedBytes by remember { mutableStateOf<ByteArray?>(null) }
     var balanceSlot by remember { mutableStateOf<BalanceSlot?>(null) }
-    var balanceInput by remember { mutableStateOf("") }
+    var selectedBalancePreset by remember { mutableStateOf("2 Miliar") }
+    var presetMenuExpanded by remember { mutableStateOf(false) }
+    val balancePresets = listOf(
+        "2 Miliar" to 2.0e9,
+        "5 Miliar" to 5.0e9,
+        "10 Miliar" to 1.0e10,
+        "50 Miliar" to 5.0e10,
+        "100 Miliar" to 1.0e11,
+        "500 Miliar" to 5.0e11,
+        "1 Triliun" to 1.0e12,
+        "10 Triliun" to 1.0e13,
+        "100 Triliun" to 1.0e14,
+        "1 Kuadriliun" to 1.0e15,
+        "10 Kuadriliun" to 1.0e16,
+        "100 Kuadriliun" to 1.0e17,
+        "1 Kuantiliun" to 1.0e18
+    )
     var editStatus by remember { mutableStateOf("Pilih save untuk mulai mengedit.") }
     var expandedFeature by remember { mutableStateOf("Uang") }
     var busy by remember { mutableStateOf(false) }
@@ -145,7 +161,7 @@ private fun EditorHome() {
                     size = bytes.size.toLong()
                     fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
                     balanceSlot = detectBalanceSlot(bytes)
-                    balanceInput = balanceSlot?.value?.toString() ?: ""
+                    selectedBalancePreset = "2 Miliar"
                     editStatus = if (balanceSlot != null) {
                         "Save siap. Periksa saldo yang terdeteksi sebelum menerapkan."
                     } else {
@@ -230,18 +246,41 @@ private fun EditorHome() {
                         Text(String.format(Locale.US, "%,.2f", slot.value), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
                         Text("Kandidat field · offset 0x${slot.offset.toString(16).uppercase(Locale.US)}", color = Muted, fontSize = 10.sp)
                         Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = balanceInput,
-                            onValueChange = { balanceInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("Saldo baru") },
-                            placeholder = { Text("2000000000") }
+                        Text("Pilih nominal saldo", color = Muted, fontSize = 10.sp)
+                        Spacer(Modifier.height(5.dp))
+                        Box(Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { presetMenuExpanded = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(selectedBalancePreset, modifier = Modifier.weight(1f))
+                                Text("▾")
+                            }
+                            DropdownMenu(
+                                expanded = presetMenuExpanded,
+                                onDismissRequest = { presetMenuExpanded = false },
+                                modifier = Modifier.heightIn(max = 360.dp)
+                            ) {
+                                balancePresets.forEach { (label, _) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            selectedBalancePreset = label
+                                            presetMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "Nominal: " + String.format(Locale.US, "%,.0f", balancePresets.first { it.first == selectedBalancePreset }.second),
+                            color = Muted,
+                            fontSize = 11.sp
                         )
                         Spacer(Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                val amount = parseBalanceAmount(balanceInput)
+                                val amount = balancePresets.first { it.first == selectedBalancePreset }.second
                                 val original = sourceBytes
                                 if (amount == null || !amount.isFinite() || amount < 0.0 || amount > 1.0e18 || original == null) {
                                     editStatus = "Nominal tidak valid."
