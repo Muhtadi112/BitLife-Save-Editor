@@ -76,6 +76,39 @@ private fun findNumericCandidates(data: ByteArray, target: Long): List<NumericHi
     return found.distinctBy { "${it.format}:${it.offset}" }.sortedBy { it.offset }
 }
 
+
+private data class NearbyNumber(val format: String, val offset: Int, val value: String, val distance: Int)
+
+private fun scanNearbyNumbers(data: ByteArray, anchor: Int, radius: Int = 128): List<NearbyNumber> {
+    val start = (anchor - radius).coerceAtLeast(0)
+    val end = (anchor + radius).coerceAtMost(data.size)
+    val found = mutableListOf<NearbyNumber>()
+    for (offset in start until end) {
+        val remaining = data.size - offset
+        if (remaining >= 4) {
+            val b4 = java.nio.ByteBuffer.wrap(data, offset, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            val i32 = b4.int
+            if (i32 in 1..1_000_000_000) found += NearbyNumber("Int32 LE", offset, i32.toString(), kotlin.math.abs(offset - anchor))
+            val f32 = java.nio.ByteBuffer.wrap(data, offset, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).float
+            if (f32.isFinite() && f32 > 0.0001f && f32 <= 1.0e15f) {
+                found += NearbyNumber("Float32 LE", offset, f32.toString(), kotlin.math.abs(offset - anchor))
+            }
+        }
+        if (remaining >= 8) {
+            val b8 = java.nio.ByteBuffer.wrap(data, offset, 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            val i64 = b8.long
+            if (i64 in 1L..1_000_000_000_000_000L) found += NearbyNumber("Int64 LE", offset, i64.toString(), kotlin.math.abs(offset - anchor))
+            val f64 = java.nio.ByteBuffer.wrap(data, offset, 8).order(java.nio.ByteOrder.LITTLE_ENDIAN).double
+            if (f64.isFinite() && f64 > 0.0001 && f64 <= 1.0e15) {
+                found += NearbyNumber("Float64 LE", offset, f64.toString(), kotlin.math.abs(offset - anchor))
+            }
+        }
+    }
+    return found.distinctBy { "${it.format}:${it.offset}:${it.value}" }
+        .sortedWith(compareBy<NearbyNumber> { it.distance }.thenBy { it.offset })
+        .take(24)
+}
+
 private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
     val names = listOf(
         "BankBalance", "SimFinances", "Att_money", "Life3", "Hero", "World",
@@ -98,6 +131,7 @@ private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
         }
     }
     val numericHits = findNumericCandidates(data, 1_000_000_000L)
+    val financeMarkers = hits.filter { it.name == "BankBalance" || it.name == "SimFinances" || it.name == "Loan" }
     val summary = buildString {
         appendLine("Binary scan selesai.")
         appendLine("Total ukuran: ${data.size} byte")
@@ -119,6 +153,24 @@ private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
             appendLine("Konteks: ${hit.context}")
         }
         if (numericHits.isEmpty()) appendLine("Tidak ditemukan representasi langsung angka pembanding.")
+        appendLine()
+        appendLine("PENELUSURAN STRUKTUR KEUANGAN (DIAGNOSTIK)")
+        appendLine("Pemeriksaan angka primitif di sekitar marker field; hasil hanya petunjuk, bukan nilai yang terverifikasi.")
+        if (financeMarkers.isEmpty()) {
+            appendLine("Marker BankBalance/SimFinances/Loan tidak ditemukan pada pemindaian ini.")
+        } else {
+            financeMarkers.take(12).forEach { marker ->
+                appendLine()
+                appendLine("Marker ${marker.name} di 0x${marker.offset.toString(16).uppercase()} (${marker.offset})")
+                val nearby = scanNearbyNumbers(data, marker.offset)
+                if (nearby.isEmpty()) appendLine("Tidak ada angka positif yang lolos filter di radius ±128 byte.")
+                nearby.forEach { n ->
+                    appendLine("  ${n.format} @0x${n.offset.toString(16).uppercase()} = ${n.value} (jarak ${n.distance} byte)")
+                }
+            }
+        }
+        appendLine()
+        appendLine("BATASAN: parser serialisasi BitLife belum terverifikasi. Jangan mengedit offset hasil diagnostik ini.")
     }
     return hits.sortedBy { it.offset } to summary
 }
@@ -219,6 +271,6 @@ private fun EditorHome() {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("Alpha 0.2 · Binary marker analysis · Read-only · Save asli aman", color = Muted, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Alpha 0.4 · Finance structure diagnostics · Read-only · Save asli aman", color = Muted, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
