@@ -3,7 +3,9 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, alpha-0.2-development ]
+    paths:
+      - 'BitLifeSaveEditor/**'
 
 permissions:
   contents: read
@@ -11,6 +13,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BitLifeSaveEditor
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -32,6 +37,6 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BitLifeSaveEditor-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: BitLifeSaveEditor-alpha-0.2-debug-apk
+          path: BitLifeSaveEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
