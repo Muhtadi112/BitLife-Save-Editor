@@ -199,7 +199,7 @@ private fun EditorHome() {
     val visibleReport = remember(report, searchQuery) {
         if (searchQuery.isBlank()) report else report.lineSequence()
             .filter { it.contains(searchQuery, ignoreCase = true) }
-            .joinToString("\\n")
+            .joinToString("\n")
     }
     val visibleHits = remember(hits, searchQuery) {
         if (searchQuery.isBlank()) hits else hits.filter {
@@ -286,7 +286,7 @@ private fun EditorHome() {
                 modifier = Modifier.weight(1f)
             ) { Text("Salin hasil laporan") }
             OutlinedButton(
-                onClick = { clipboardManager.setText(AnnotatedString(visibleHits.joinToString("\\n\\n") { "${it.name}\\nOffset: 0x${it.offset.toString(16).uppercase()} (${it.offset})\\n${it.context}\\nHEX: ${it.hex}" })) },
+                onClick = { clipboardManager.setText(AnnotatedString(visibleHits.joinToString("\n\n") { "${it.name}\nOffset: 0x${it.offset.toString(16).uppercase()} (${it.offset})\n${it.context}\nHEX: ${it.hex}" })) },
                 enabled = visibleHits.isNotEmpty(),
                 modifier = Modifier.weight(1f)
             ) { Text("Salin marker") }
