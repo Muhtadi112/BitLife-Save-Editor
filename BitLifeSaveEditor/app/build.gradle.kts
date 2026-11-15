@@ -8,7 +8,6 @@ android {
     namespace = "com.adi.bitlifesaveeditor"
     compileSdk = 35
 
-    // Keep Java and Kotlin bytecode targets aligned.
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -22,8 +21,8 @@ android {
         applicationId = "com.adi.bitlifesaveeditor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-alpha"
+        versionCode = 3
+        versionName = "0.6.0-alpha"
     }
     buildFeatures { compose = true }
 }
