@@ -1,4 +1,4 @@
-name: Analyze BitLife Save
+name: Analyze and Patch BitLife Balance
 
 on:
   workflow_dispatch:
@@ -18,62 +18,64 @@ jobs:
         with:
           ref: alpha-0.2-development
           fetch-depth: 0
-      - name: Compare targeted finance structures
+
+      - name: Extract latest save from main and patch verified balance candidate
         shell: bash
         run: |
           git fetch origin main
-          git show origin/main:savedLife.data > /tmp/new.data
-          git show origin/main^:savedLife.data > /tmp/old.data
+          git show origin/main:savedLife.data > /tmp/source.data
           python3 - <<'PY'
           import struct, hashlib
           from pathlib import Path
-          old=Path('/tmp/old.data').read_bytes()
-          new=Path('/tmp/new.data').read_bytes()
-          out=[]
-          for label,data in [('OLD',old),('NEW',new)]:
-            out += [f'{label}: size={len(data)} sha256={hashlib.sha256(data).hexdigest()}']
-            for marker in [b'BankBalance',b'<BankBalance>k__BackingField',b'SimFinances',b'SimBankLoan',b'Loan']:
-              ps=[]; s=0
-              while True:
-                p=data.find(marker,s)
-                if p<0: break
-                ps.append(p); s=p+1
-              out.append(f'  {marker.decode()}: '+', '.join(f'0x{x:X}' for x in ps[:30])+f' (count={len(ps)})')
-              if marker in [b'BankBalance',b'<BankBalance>k__BackingField',b'SimBankLoan']:
-                for p in ps[:8]:
-                  lo=max(0,p-96); hi=min(len(data),p+len(marker)+320)
-                  out.append(f'    CONTEXT 0x{lo:X}-0x{hi:X}')
-                  out.append('    HEX '+data[lo:hi].hex(' ').upper())
-                  out.append('    ASCII '+data[lo:hi].decode('latin1',errors='replace'))
-            out.append('')
-          out += ['VALUE SEARCHES']
-          for value in [853245,1000000000,999146755]:
-            out.append(f'Value {value}:')
-            for typ,fmt in [('i32','<i'),('i64','<q'),('f32','<f'),('f64','<d')]:
-              try: raw=struct.pack(fmt,value)
-              except (OverflowError,struct.error): continue
-              for label,data in [('OLD',old),('NEW',new)]:
-                poss=[]; s=0
-                while True:
-                  p=data.find(raw,s)
-                  if p<0: break
-                  poss.append(p); s=p+1
-                if poss: out.append(f'  {label} {typ} {raw.hex(" ").upper()} @ '+', '.join(f'0x{x:X}' for x in poss[:30]))
-            raw=str(value).encode()
-            for label,data in [('OLD',old),('NEW',new)]:
-              poss=[]; s=0
-              while True:
-                p=data.find(raw,s)
-                if p<0: break
-                poss.append(p); s=p+1
-              if poss: out.append(f'  {label} ASCII @ '+', '.join(f'0x{x:X}' for x in poss[:30]))
-          out += ['', 'No bytes modified. Numeric matches are candidates, not proof of BankBalance ownership.']
-          Path('bitlife-finance-compare.txt').write_text('\\n'.join(out),encoding='utf-8')
-          print('\\n'.join(out[:80]))
+          src=Path('/tmp/source.data').read_bytes()
+          old_value=struct.pack('<d', 853244.6095520258)
+          new_value=struct.pack('<d', 2_000_000_000.0)
+          positions=[]
+          start=0
+          while True:
+            p=src.find(old_value,start)
+            if p<0: break
+            positions.append(p)
+            start=p+1
+          if len(positions)!=1:
+            raise SystemExit(f'ABORT: expected exactly one matching balance double, found {len(positions)}')
+          pos=positions[0]
+          if pos != 0xF29F:
+            raise SystemExit(f'ABORT: expected offset 0xF29F, got 0x{pos:X}')
+          # Guard: this value must remain inside the serialized SimBankLoan record.
+          loan=src.rfind(b'SimBankLoan', max(0,pos-128), pos)
+          if loan<0 or pos-loan>64:
+            raise SystemExit('ABORT: candidate is not adjacent to SimBankLoan structure')
+          out=bytearray(src)
+          out[pos:pos+8]=new_value
+          dst=bytes(out)
+          if dst[:pos] != src[:pos] or dst[pos+8:] != src[pos+8:]:
+            raise SystemExit('ABORT: unexpected bytes changed')
+          if dst.find(new_value) != pos:
+            raise SystemExit('ABORT: patched value verification failed')
+          Path('savedLife_2billion.data').write_bytes(dst)
+          report=[
+            'BITLIFE BALANCE PATCH REPORT',
+            f'Source size: {len(src)}',
+            f'Source SHA256: {hashlib.sha256(src).hexdigest()}',
+            f'Patched SHA256: {hashlib.sha256(dst).hexdigest()}',
+            f'Changed offset: 0x{pos:X}',
+            f'Original Float64: {struct.unpack("<d",old_value)[0]} (displayed in game as €853,245)',
+            f'New Float64: {struct.unpack("<d",new_value)[0]}',
+            f'Original bytes: {old_value.hex(" ").upper()}',
+            f'New bytes: {new_value.hex(" ").upper()}',
+            'Exactly one 8-byte value was changed; source save was not modified.',
+            'Candidate identified by exact match to displayed bank balance and unique occurrence adjacent to SimBankLoan; validate in-game before relying on it.'
+          ]
+          Path('patch-report.txt').write_text('\\n'.join(report),encoding='utf-8')
+          print('\\n'.join(report))
           PY
-      - name: Upload targeted finance report
+
+      - name: Upload patched save and report
         uses: actions/upload-artifact@v4
         with:
-          name: bitlife-finance-compare
-          path: bitlife-finance-compare.txt
+          name: bitlife-2-billion-save
+          path: |
+            savedLife_2billion.data
+            patch-report.txt
           retention-days: 7
