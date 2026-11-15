@@ -13,13 +13,7 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout development branch
-        uses: actions/checkout@v4
-        with:
-          ref: alpha-0.2-development
-          fetch-depth: 0
-
-      - name: Compare latest save with previous uploaded save
+      - name: Compare targeted finance structures
         shell: bash
         run: |
           git fetch origin main
@@ -28,55 +22,53 @@ jobs:
           python3 - <<'PY'
           import struct, hashlib
           from pathlib import Path
-          old = Path('/tmp/old.data').read_bytes()
-          new = Path('/tmp/new.data').read_bytes()
-          lines = [
-            'BITLIFE SAVE COMPARISON',
-            f'OLD size={len(old)} sha256={hashlib.sha256(old).hexdigest()}',
-            f'NEW size={len(new)} sha256={hashlib.sha256(new).hexdigest()}',
-            f'Size delta={len(new)-len(old):+d} bytes',
-            ''
-          ]
-          # Compare equal-length overlapping data; report contiguous changed regions.
-          n=min(len(old),len(new))
-          diffs=[i for i in range(n) if old[i] != new[i]]
-          lines.append(f'Changed byte positions in overlap: {len(diffs)}')
-          runs=[]
-          for p in diffs:
-            if not runs or p > runs[-1][-1]+1: runs.append([p])
-            else: runs[-1].append(p)
-          lines.append('CHANGED REGIONS (with 32-byte context)')
-          for run in runs:
-            a,b=run[0],run[-1]+1
-            lo,hi=max(0,a-32),min(n,b+32)
-            lines.append(f'offset 0x{a:X}-0x{b-1:X} ({a}-{b-1}), length={b-a}')
-            lines.append(f'OLD: {old[lo:hi].hex(" ").upper()}')
-            lines.append(f'NEW: {new[lo:hi].hex(" ").upper()}')
-            lines.append(f'OLD ASCII: {old[lo:hi].decode("latin1",errors="replace")}')
-            lines.append(f'NEW ASCII: {new[lo:hi].decode("latin1",errors="replace")}')
-          # Search occurrences of exact old/new currency encodings and changed numeric values.
-          lines += ['', 'KNOWN CURRENCY ENCODINGS']
-          values=[853245,1000000000,999146755]
-          for value in values:
-            lines.append(f'VALUE {value}:')
-            for typ,fmt in [('Int32','<i'),('Int64','<q'),('Float32','<f'),('Float64','<d')]:
+          old=Path('/tmp/old.data').read_bytes()
+          new=Path('/tmp/new.data').read_bytes()
+          out=[]
+          for label,data in [('OLD',old),('NEW',new)]:
+            out += [f'{label}: size={len(data)} sha256={hashlib.sha256(data).hexdigest()}']
+            for marker in [b'BankBalance',b'<BankBalance>k__BackingField',b'SimFinances',b'SimBankLoan',b'Loan']:
+              ps=[]; s=0
+              while True:
+                p=data.find(marker,s)
+                if p<0: break
+                ps.append(p); s=p+1
+              out.append(f'  {marker.decode()}: '+', '.join(f'0x{x:X}' for x in ps[:30])+f' (count={len(ps)})')
+              if marker in [b'BankBalance',b'<BankBalance>k__BackingField',b'SimBankLoan']:
+                for p in ps[:8]:
+                  lo=max(0,p-96); hi=min(len(data),p+len(marker)+320)
+                  out.append(f'    CONTEXT 0x{lo:X}-0x{hi:X}')
+                  out.append('    HEX '+data[lo:hi].hex(' ').upper())
+                  out.append('    ASCII '+data[lo:hi].decode('latin1',errors='replace'))
+            out.append('')
+          out += ['VALUE SEARCHES']
+          for value in [853245,1000000000,999146755]:
+            out.append(f'Value {value}:')
+            for typ,fmt in [('i32','<i'),('i64','<q'),('f32','<f'),('f64','<d')]:
               try: raw=struct.pack(fmt,value)
               except (OverflowError,struct.error): continue
-              for label,blob in [('OLD',old),('NEW',new)]:
-                poss=[]; start=0
+              for label,data in [('OLD',old),('NEW',new)]:
+                poss=[]; s=0
                 while True:
-                  p=blob.find(raw,start)
+                  p=data.find(raw,s)
                   if p<0: break
-                  poss.append(p); start=p+1
-                if poss: lines.append(f'  {label} {typ} bytes={raw.hex(" ").upper()} offsets='+', '.join(f'0x{x:X}' for x in poss[:50]))
-          lines += ['', 'NOTE: byte changes identify candidates only; serialized field ownership/type must still be verified.', 'No save bytes were modified.']
-          Path('bitlife-save-diff.txt').write_text('\\n'.join(lines),encoding='utf-8')
-          print('\\n'.join(lines[:180]))
+                  poss.append(p); s=p+1
+                if poss: out.append(f'  {label} {typ} {raw.hex(" ").upper()} @ '+', '.join(f'0x{x:X}' for x in poss[:30]))
+            raw=str(value).encode()
+            for label,data in [('OLD',old),('NEW',new)]:
+              poss=[]; s=0
+              while True:
+                p=data.find(raw,s)
+                if p<0: break
+                poss.append(p); s=p+1
+              if poss: out.append(f'  {label} ASCII @ '+', '.join(f'0x{x:X}' for x in poss[:30]))
+          out += ['', 'No bytes modified. Numeric matches are candidates, not proof of BankBalance ownership.']
+          Path('bitlife-finance-compare.txt').write_text('\\n'.join(out),encoding='utf-8')
+          print('\\n'.join(out[:80]))
           PY
-
-      - name: Upload comparison report
+      - name: Upload targeted finance report
         uses: actions/upload-artifact@v4
         with:
-          name: bitlife-save-diff
-          path: bitlife-save-diff.txt
+          name: bitlife-finance-compare
+          path: bitlife-finance-compare.txt
           retention-days: 7
