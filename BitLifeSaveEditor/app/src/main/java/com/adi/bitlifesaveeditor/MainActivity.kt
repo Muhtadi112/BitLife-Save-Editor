@@ -52,6 +52,29 @@ private fun findBytes(data: ByteArray, pattern: ByteArray): List<Int> {
 
 private data class NumericHit(val format: String, val offset: Int, val hex: String, val context: String)
 
+/**
+ * Experimental balance locator based on two independently compared saves.
+ * In both samples, the Float64 at SimBankLoan marker + 19 bytes matched
+ * the balance displayed by BitLife. This remains an empirical heuristic,
+ * not a verified parser for the game's serialization format.
+ */
+private data class BalanceSlot(val offset: Int, val value: Double, val markerOffset: Int)
+
+private fun detectBalanceSlot(data: ByteArray): BalanceSlot? {
+    val marker = "SimBankLoan".toByteArray(Charsets.US_ASCII)
+    val matches = findBytes(data, marker).mapNotNull { markerOffset ->
+        val valueOffset = markerOffset + 19
+        if (valueOffset < 0 || valueOffset + 8 > data.size) return@mapNotNull null
+        val value = java.nio.ByteBuffer.wrap(data, valueOffset, 8)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN).double
+        if (value.isFinite() && value >= 0.0 && value <= 1.0e15) {
+            BalanceSlot(valueOffset, value, markerOffset)
+        } else null
+    }
+    // Fail closed: never guess if more than one candidate exists.
+    return matches.distinctBy { it.offset }.singleOrNull()
+}
+
 private fun findNumericCandidates(data: ByteArray, target: Long): List<NumericHit> {
     val patterns = listOf(
         "Int32 LE" to byteArrayOf(0x00, 0xCA.toByte(), 0x9A.toByte(), 0x3B),
@@ -193,6 +216,11 @@ private fun EditorHome() {
     var hits by remember { mutableStateOf<List<MarkerHit>>(emptyList()) }
     var size by remember { mutableStateOf(0L) }
     var sha by remember { mutableStateOf("") }
+    var sourceBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var editedBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var balanceSlot by remember { mutableStateOf<BalanceSlot?>(null) }
+    var balanceInput by remember { mutableStateOf("") }
+    var editStatus by remember { mutableStateOf("Belum ada perubahan.") }
     var busy by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val clipboardManager = LocalClipboardManager.current
@@ -217,6 +245,11 @@ private fun EditorHome() {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     val bytes = input.readBytes()
                     size = bytes.size.toLong()
+                    sourceBytes = bytes.copyOf()
+                    editedBytes = null
+                    balanceSlot = detectBalanceSlot(bytes)
+                    balanceInput = balanceSlot?.value?.toString() ?: ""
+                    editStatus = if (balanceSlot != null) "Kandidat ditemukan. Periksa nilainya sebelum menerapkan." else "Kandidat saldo tidak unik/tidak ditemukan. Edit dinonaktifkan."
                     fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
                     sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
                     val result = analyzeBinary(bytes)
@@ -247,6 +280,19 @@ private fun EditorHome() {
         }
     }
 
+
+    val exportEdited = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val bytes = editedBytes
+        if (uri != null && bytes != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { output -> output.write(bytes) }
+                report += "\\n\\nSave hasil edit berhasil diekspor. File sumber tetap tidak diubah."
+            } catch (e: Exception) {
+                report += "\\n\\nEkspor hasil edit gagal: ${e.message}"
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(Bg).verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("ADI LABS", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
         Spacer(Modifier.height(8.dp))
@@ -266,6 +312,54 @@ private fun EditorHome() {
                 OutlinedButton(onClick = { if (selectedUri != null) exportCopy.launch("savedLife_backup.data") }, enabled = selectedUri != null, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Ekspor Salinan / Backup")
                 }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp)) {
+                Text("EDIT SALDO · EKSPERIMENTAL", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Spacer(Modifier.height(8.dp))
+                val slot = balanceSlot
+                if (slot == null) {
+                    Text("Slot saldo belum bisa diidentifikasi secara unik. Fitur edit dikunci agar tidak mengubah data yang salah.", color = Muted, fontSize = 12.sp)
+                } else {
+                    Text("Kandidat Float64: ${"%.6f".format(java.util.Locale.US, slot.value)}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Offset nilai: 0x${slot.offset.toString(16).uppercase()} · Marker SimBankLoan: 0x${slot.markerOffset.toString(16).uppercase()}", color = Muted, fontSize = 10.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = balanceInput,
+                        onValueChange = { balanceInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Saldo baru (angka)") },
+                        placeholder = { Text("2000000000") }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            val amount = balanceInput.trim().replace(",", ".").toDoubleOrNull()
+                            val original = sourceBytes
+                            if (amount == null || !amount.isFinite() || amount < 0.0 || amount > 1.0e15 || original == null) {
+                                editStatus = "Angka tidak valid. Gunakan angka 0 sampai 1.000.000.000.000.000."
+                            } else {
+                                val patched = original.copyOf()
+                                java.nio.ByteBuffer.wrap(patched, slot.offset, 8)
+                                    .order(java.nio.ByteOrder.LITTLE_ENDIAN).putDouble(amount)
+                                editedBytes = patched
+                                editStatus = "Perubahan diterapkan ke salinan di memori. Ekspor untuk membuat file baru."
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Terapkan ke salinan") }
+                    OutlinedButton(
+                        onClick = { if (editedBytes != null) exportEdited.launch("savedLife_edited.data") },
+                        enabled = editedBytes != null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Ekspor Save Hasil Edit") }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(editStatus, color = Muted, fontSize = 11.sp)
+                Text("Peringatan: deteksi ini masih heuristik dari perbandingan dua save, bukan parser resmi. Selalu simpan backup dan uji hasilnya di game.", color = Color(0xFFFFC56E), fontSize = 10.sp, lineHeight = 14.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -313,6 +407,6 @@ private fun EditorHome() {
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("Alpha 0.4 · Finance structure diagnostics · Read-only · Save asli aman", color = Muted, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("Alpha 0.5 · Experimental balance editing · Original save preserved", color = Muted, fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
