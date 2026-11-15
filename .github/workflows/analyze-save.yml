@@ -1,0 +1,87 @@
+name: Analyze BitLife Save
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: alpha-0.2-development
+          fetch-depth: 0
+
+      - name: Read save from main and analyze
+        shell: bash
+        run: |
+          git show origin/main:savedLife.data > /tmp/savedLife.data
+          python3 - <<'PY'
+          import struct, hashlib
+          from pathlib import Path
+
+          data = Path('/tmp/savedLife.data').read_bytes()
+          markers = [
+              b'BankBalance', b'SimFinances', b'Loan', b'Life3',
+              b'<BankBalance>k__BackingField',
+              b'<_HouseArray>k__BackingField',
+              b'<_CarArray>k__BackingField',
+          ]
+          lines = [
+              'BITLIFE SAVE DIAGNOSTIC',
+              f'Size: {len(data)} bytes',
+              f'SHA-256: {hashlib.sha256(data).hexdigest()}',
+              '',
+              'MARKER OFFSETS AND CONTEXT',
+          ]
+          anchors = set()
+          for marker in markers:
+              start = 0
+              found = []
+              while True:
+                  pos = data.find(marker, start)
+                  if pos < 0: break
+                  found.append(pos)
+                  anchors.add(pos)
+                  start = pos + 1
+              lines.append(f'[{marker.decode(errors="replace")}] count={len(found)}')
+              for pos in found[:100]:
+                  lo, hi = max(0, pos-48), min(len(data), pos+len(marker)+80)
+                  lines.append(f'  offset=0x{pos:X} ({pos})')
+                  lines.append(f'  HEX: {data[lo:hi].hex(" ").upper()}')
+                  lines.append(f'  ASCII: {data[lo:hi].decode("latin1", errors="replace")}')
+          lines += ['', 'PRIMITIVE NUMBERS NEAR FINANCE MARKERS (DIAGNOSTIC ONLY)']
+          seen = set()
+          for anchor in sorted(anchors):
+              if not any(x in data[max(0,anchor-64):anchor+128] for x in (b'BankBalance', b'SimFinances', b'Loan')):
+                  continue
+              for off in range(max(0,anchor-128), min(len(data)-8,anchor+256)+1):
+                  for typ, fmt, size in [('Int32','<i',4),('Int64','<q',8),('Float32','<f',4),('Float64','<d',8)]:
+                      if off+size > len(data): continue
+                      try: val = struct.unpack_from(fmt,data,off)[0]
+                      except Exception: continue
+                      if isinstance(val,float):
+                          if not (val == val and abs(val) != float('inf')): continue
+                          if abs(val) > 1e15: continue
+                          if abs(val) < 0.000001: continue
+                      else:
+                          if abs(val) > 10**12 or val == 0: continue
+                      key=(off,typ)
+                      if key in seen: continue
+                      seen.add(key)
+                      lines.append(f'  {typ} offset=0x{off:X} ({off}) value={val!r} delta_from_marker={off-anchor:+d}')
+          lines += ['', 'WARNING: numeric proximity is not proof of field ownership or type.', 'No bytes were modified.']
+          Path('bitlife-save-diagnostic.txt').write_text('\n'.join(lines), encoding='utf-8')
+          print('\n'.join(lines[:80]))
+          PY
+
+      - name: Upload diagnostic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitlife-save-diagnostic
+          path: bitlife-save-diagnostic.txt
+          retention-days: 7
