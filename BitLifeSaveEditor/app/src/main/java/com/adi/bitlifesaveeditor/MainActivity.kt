@@ -286,9 +286,9 @@ private fun EditorHome() {
         if (uri != null && bytes != null) {
             try {
                 context.contentResolver.openOutputStream(uri)?.use { output -> output.write(bytes) }
-                report += "\\n\\nSave hasil edit berhasil diekspor. File sumber tetap tidak diubah."
+                report += "\n\nSave hasil edit berhasil diekspor. File sumber tetap tidak diubah."
             } catch (e: Exception) {
-                report += "\\n\\nEkspor hasil edit gagal: ${e.message}"
+                report += "\n\nEkspor hasil edit gagal: ${e.message}"
             }
         }
     }
