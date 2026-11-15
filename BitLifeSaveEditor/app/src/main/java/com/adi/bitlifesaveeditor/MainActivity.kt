@@ -48,6 +48,34 @@ private fun findBytes(data: ByteArray, pattern: ByteArray): List<Int> {
     return hits
 }
 
+private data class NumericHit(val format: String, val offset: Int, val hex: String, val context: String)
+
+private fun findNumericCandidates(data: ByteArray, target: Long): List<NumericHit> {
+    val patterns = listOf(
+        "Int32 LE" to byteArrayOf(0x00, 0xCA.toByte(), 0x9A.toByte(), 0x3B),
+        "Int64 LE" to byteArrayOf(0x00, 0xCA.toByte(), 0x9A.toByte(), 0x3B, 0, 0, 0, 0),
+        "Float32 1e9" to java.nio.ByteBuffer.allocate(4).order(java.nio.ByteOrder.LITTLE_ENDIAN).putFloat(target.toFloat()).array(),
+        "Float64 1e9" to java.nio.ByteBuffer.allocate(8).order(java.nio.ByteOrder.LITTLE_ENDIAN).putDouble(target.toDouble()).array(),
+        "ASCII decimal" to target.toString().toByteArray(Charsets.US_ASCII)
+    )
+    val found = mutableListOf<NumericHit>()
+    for ((label, pattern) in patterns) {
+        for (offset in findBytes(data, pattern).take(50)) {
+            val start = (offset - 12).coerceAtLeast(0)
+            val end = (offset + pattern.size + 20).coerceAtMost(data.size)
+            val around = data.copyOfRange(start, end)
+            val printable = around.map { b ->
+                val c = b.toInt() and 0xff
+                if (c in 32..126) c.toChar() else '.'
+            }.joinToString("")
+            val hex = data.copyOfRange(offset, (offset + pattern.size).coerceAtMost(data.size))
+                .joinToString(" ") { "%02X".format(it.toInt() and 0xff) }
+            found += NumericHit(label, offset, hex, printable)
+        }
+    }
+    return found.distinctBy { "${it.format}:${it.offset}" }.sortedBy { it.offset }
+}
+
 private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
     val names = listOf(
         "BankBalance", "SimFinances", "Att_money", "Life3", "Hero", "World",
@@ -69,6 +97,7 @@ private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
             hits += MarkerHit(name, offset, printable, hex)
         }
     }
+    val numericHits = findNumericCandidates(data, 1_000_000_000L)
     val summary = buildString {
         appendLine("Binary scan selesai.")
         appendLine("Total ukuran: ${data.size} byte")
@@ -78,6 +107,18 @@ private fun analyzeBinary(data: ByteArray): Pair<List<MarkerHit>, String> {
         appendLine()
         appendLine("PENTING: offset di bawah adalah lokasi teks field, bukan otomatis lokasi nilai saldo.")
         appendLine("Belum ada nilai yang diubah.")
+        appendLine()
+        appendLine("PEMERIKSAAN ANGKA PEMBANDING: 1.000.000.000")
+        appendLine("Kandidat representasi angka: ${numericHits.size}")
+        appendLine("Format diuji: Int32 LE, Int64 LE, Float32, Float64, dan ASCII.")
+        appendLine("CATATAN: kecocokan angka belum membuktikan bahwa itu BankBalance.")
+        numericHits.take(40).forEach { hit ->
+            appendLine()
+            appendLine("${hit.format} · Offset 0x${hit.offset.toString(16).uppercase()} (${hit.offset})")
+            appendLine("HEX: ${hit.hex}")
+            appendLine("Konteks: ${hit.context}")
+        }
+        if (numericHits.isEmpty()) appendLine("Tidak ditemukan representasi langsung angka pembanding.")
     }
     return hits.sortedBy { it.offset } to summary
 }
