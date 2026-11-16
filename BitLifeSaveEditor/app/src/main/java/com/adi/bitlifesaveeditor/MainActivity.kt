@@ -34,8 +34,8 @@ private fun parseBalanceAmount(raw: String): Double? {
     val value = raw.trim().replace(" ", "")
     if (value.isEmpty()) return null
     val normalized = when {
-        Regex("""^[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?$""").matches(value) -> value.replace(",", "")
-        Regex("""^[0-9]{1,3}(\\.[0-9]{3})+(,[0-9]+)?$""").matches(value) -> value.replace(".", "").replace(",", ".")
+        Regex("""^[0-9]{1,3}(,[0-9]{3})+(\.[0-9]+)?$""").matches(value) -> value.replace(",", "")
+        Regex("""^[0-9]{1,3}(\.[0-9]{3})+(,[0-9]+)?$""").matches(value) -> value.replace(".", "").replace(",", ".")
         value.count { it == ',' } > 1 -> value.replace(",", "")
         value.contains(',') && !value.contains('.') -> value.replace(',', '.')
         else -> value
