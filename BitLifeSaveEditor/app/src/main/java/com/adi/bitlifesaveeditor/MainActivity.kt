@@ -30,6 +30,19 @@ private val Accent = Color(0xFF9B7BFF)
 private val Muted = Color(0xFF9AA3B7)
 private val Good = Color(0xFF69D6A4)
 
+private fun parseBalanceAmount(raw: String): Double? {
+    val value = raw.trim().replace(" ", "")
+    if (value.isEmpty()) return null
+    val normalized = when {
+        Regex("""^[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?$""").matches(value) -> value.replace(",", "")
+        Regex("""^[0-9]{1,3}(\\.[0-9]{3})+(,[0-9]+)?$""").matches(value) -> value.replace(".", "").replace(",", ".")
+        value.count { it == ',' } > 1 -> value.replace(",", "")
+        value.contains(',') && !value.contains('.') -> value.replace(',', '.')
+        else -> value
+    }
+    return normalized.toDoubleOrNull()
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
