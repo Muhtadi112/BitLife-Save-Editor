@@ -1,32 +1,31 @@
-# BitLife Save Editor — ADI (Android source project)
+# BitLife Save Editor — Android Edition by ADI
 
-Offline Android starter project (Kotlin + Jetpack Compose), package `com.adi.bitlifesaveeditor`.
+Offline Android app built with Kotlin and Jetpack Compose. Package: `com.adi.bitlifesaveeditor`.
 
-## Current build scope (Alpha 0.1)
-- Import a BitLife save through Android Storage Access Framework (no root, no broad storage permission).
-- Read-only binary inspection: file size, SHA-256, header bytes, and visible marker strings.
-- Export an unchanged copy as a backup.
-- UI placeholders for money, age/stats, family, career/education/assets.
+## Current Alpha 0.7 scope
 
-## Important limitation
-This is deliberately a **read-only alpha**. The save appears to contain .NET BinaryFormatter-style serialized data (e.g. `Assembly-CSharp`, `Life3`). Finding strings such as `BankBalance` or seeing a changed floating-point value is not enough to safely patch the object graph. The previously discussed candidate offset is not a verified field mapping. Do not use raw byte replacement or claim unlimited money is implemented until a parser can deserialize and reserialize the exact game save while preserving references and record lengths.
+- Import `savedLife.data` through Android Storage Access Framework (no root and no broad storage permission).
+- Keep the imported source bytes in memory as a separate copy.
+- Export an unchanged backup to a new destination.
+- Experimental Money Editor with preset and custom numeric amounts.
+- SHA-256 fingerprints for the source and edited copy.
+- Final verification before export: the file length must remain identical, the expected candidate must still be present, the edited Double must equal the requested amount, and every byte outside the 8-byte candidate range must remain unchanged.
+- Unit tests for the patch engine using synthetic NRBF fixtures.
 
-## Build APK with GitHub Actions (no PC required)
-1. Create a new GitHub repository and upload the contents of this project (not the ZIP file itself).
-2. Make sure `.github/workflows/android-apk.yml` is included.
-3. Open the repository's **Actions** tab.
-4. Select **Build Android APK** and tap **Run workflow** (or push to `main` to trigger it).
-5. Open the completed workflow run, scroll to **Artifacts**, and download `BitLifeSaveEditor-debug-apk`.
-6. Extract the downloaded artifact ZIP on Android to get `app-debug.apk`.
+## Critical BinaryFormatter limitation
 
-The workflow uses JDK 17 and Gradle 8.9, then runs `assembleDebug`.
+The current money implementation is a **guarded fixed-width candidate patcher**, not a general .NET BinaryFormatter/NRBF deserializer and serializer. It checks the standard NRBF stream header plus the known `Assembly-CSharp`, `Life3`, and unique `SimBankLoan` markers, then checks the candidate Double at 19 bytes after that marker. It changes only those 8 bytes in a copied file and verifies the unchanged regions before export.
 
-## Local build
-Open this folder in Android Studio (recent version), use JDK 17, and run `gradle assembleDebug` with Gradle 8.9 or compatible. APK output: `app/build/outputs/apk/debug/app-debug.apk`.
+This reduces accidental edits, but it does **not** prove that every BitLife version uses the same object layout or that the game will accept the exported save. The automated tests use synthetic data and are not a substitute for an in-game round-trip test. Do not overwrite the original save. Import a copy, export under a new filename, and test the result in BitLife before relying on it.
 
-Compile SDK 35, min SDK 26, target SDK 35. The app has no network permission and no internet dependency at runtime. GitHub is used only as a cloud build service.
+## Build APK with GitHub Actions
 
+The Android app itself has no network permission and does not require an account or server at runtime. GitHub Actions is only used as a build machine.
 
-## Alpha 0.2 development
+1. Open the `alpha-0.2-development` branch.
+2. Open **Actions** and run **Build BitLife Save Editor Alpha 0.2**, or push a change to the project folder.
+3. Wait for the **Run unit tests** and **Build debug APK** steps to finish successfully.
+4. Download the `BitLifeSaveEditor-alpha-0.2-debug-apk` artifact from that run.
+5. Extract the artifact ZIP to obtain `app-debug.apk`.
 
-Adds offline binary marker scanning and offset/context reporting. This build remains read-only: it does not modify serialized save values until field types and offsets are verified.
+Build uses JDK 17 and Gradle 8.9. Android configuration: compile SDK 35, target SDK 35 (Android 15), minimum SDK 26.

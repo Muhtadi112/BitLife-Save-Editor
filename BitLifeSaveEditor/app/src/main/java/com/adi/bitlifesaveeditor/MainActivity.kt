@@ -22,8 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.Locale
 
 private val Bg = Color(0xFF090B12)
@@ -31,48 +29,6 @@ private val Panel = Color(0xFF151927)
 private val Accent = Color(0xFF9B7BFF)
 private val Muted = Color(0xFF9AA3B7)
 private val Good = Color(0xFF69D6A4)
-
-private data class BalanceSlot(val offset: Int, val value: Double, val markerOffset: Int)
-
-// Accept plain digits and common grouped formats such as 9,876,543 or 9.876.543.
-private fun parseBalanceAmount(raw: String): Double? {
-    val value = raw.trim().replace(" ", "")
-    if (value.isEmpty()) return null
-    val normalized = when {
-        Regex("""^[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?$""").matches(value) -> value.replace(",", "")
-        Regex("""^[0-9]{1,3}(\\.[0-9]{3})+(,[0-9]+)?$""").matches(value) -> value.replace(".", "").replace(",", ".")
-        value.count { it == ',' } > 1 -> value.replace(",", "")
-        value.contains(',') && !value.contains('.') -> value.replace(',', '.')
-        else -> value
-    }
-    return normalized.toDoubleOrNull()
-}
-
-private fun findBytes(data: ByteArray, pattern: ByteArray): List<Int> {
-    if (pattern.isEmpty() || pattern.size > data.size) return emptyList()
-    val hits = mutableListOf<Int>()
-    var i = 0
-    while (i <= data.size - pattern.size) {
-        var match = true
-        for (j in pattern.indices) {
-            if (data[i + j] != pattern[j]) { match = false; break }
-        }
-        if (match) { hits += i; i += pattern.size } else i++
-    }
-    return hits
-}
-
-// Experimental locator: candidate observed in two compared saves; not a complete save parser.
-private fun detectBalanceSlot(data: ByteArray): BalanceSlot? {
-    val marker = "SimBankLoan".toByteArray(Charsets.US_ASCII)
-    val matches = findBytes(data, marker).mapNotNull { markerOffset ->
-        val offset = markerOffset + 19
-        if (offset < 0 || offset + 8 > data.size) return@mapNotNull null
-        val value = ByteBuffer.wrap(data, offset, 8).order(ByteOrder.LITTLE_ENDIAN).double
-        if (value.isFinite() && value >= 0.0 && value <= 1.0e18) BalanceSlot(offset, value, markerOffset) else null
-    }
-    return matches.distinctBy { it.offset }.singleOrNull()
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,6 +85,10 @@ private fun EditorHome() {
     var editedBytes by remember { mutableStateOf<ByteArray?>(null) }
     var balanceSlot by remember { mutableStateOf<BalanceSlot?>(null) }
     var selectedBalancePreset by remember { mutableStateOf("2 Miliar") }
+    var customBalanceText by remember { mutableStateOf("2000000000") }
+    var editedBalanceAmount by remember { mutableStateOf<Double?>(null) }
+    var sourceHash by remember { mutableStateOf("") }
+    var editedHash by remember { mutableStateOf("") }
     var presetMenuExpanded by remember { mutableStateOf(false) }
     val balancePresets = listOf(
         "2 Miliar" to 2.0e9,
@@ -158,14 +118,18 @@ private fun EditorHome() {
                     val bytes = input.readBytes()
                     sourceBytes = bytes.copyOf()
                     editedBytes = null
+                    editedBalanceAmount = null
+                    editedHash = ""
+                    sourceHash = BalancePatchEngine.sha256(bytes)
                     size = bytes.size.toLong()
                     fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
-                    balanceSlot = detectBalanceSlot(bytes)
+                    balanceSlot = BalancePatchEngine.inspect(bytes)
                     selectedBalancePreset = "2 Miliar"
+                    customBalanceText = "2000000000"
                     editStatus = if (balanceSlot != null) {
                         "Save siap. Periksa saldo yang terdeteksi sebelum menerapkan."
                     } else {
-                        "Slot saldo tidak ditemukan secara unik. Fitur uang dikunci untuk mencegah salah edit."
+                        "Header NRBF atau kandidat saldo tidak lolos validasi. Fitur uang dikunci untuk mencegah salah edit."
                     }
                 } ?: run { editStatus = "File gagal dibaca." }
             } catch (e: Exception) {
@@ -178,18 +142,35 @@ private fun EditorHome() {
         val source = sourceBytes
         if (uri != null && source != null) {
             try {
-                context.contentResolver.openOutputStream(uri)?.use { it.write(source) }
-                editStatus = "Backup berhasil diekspor. Save asli tetap aman."
+                val output = context.contentResolver.openOutputStream(uri)
+                if (output == null) {
+                    editStatus = "Lokasi backup tidak dapat dibuka."
+                } else {
+                    output.use { it.write(source.copyOf()) }
+                    editStatus = "Backup berhasil diekspor. Save asli tidak ditimpa."
+                }
             } catch (e: Exception) { editStatus = "Backup gagal: ${e.message}" }
         }
     }
 
     val exportEdited = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val bytes = editedBytes
-        if (uri != null && bytes != null) {
+        val original = sourceBytes
+        val slot = balanceSlot
+        val expectedAmount = editedBalanceAmount
+        if (uri != null && bytes != null && original != null && slot != null && expectedAmount != null) {
             try {
-                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                editStatus = "Save hasil edit berhasil diekspor."
+                if (!BalancePatchEngine.verifyPatched(original, bytes, slot, expectedAmount)) {
+                    editStatus = "Verifikasi akhir gagal. File tidak diekspor."
+                } else {
+                    val output = context.contentResolver.openOutputStream(uri)
+                    if (output == null) {
+                        editStatus = "Lokasi ekspor tidak dapat dibuka."
+                    } else {
+                        output.use { it.write(bytes.copyOf()) }
+                        editStatus = "Save hasil edit lolos verifikasi byte dan berhasil diekspor. SHA-256: ${editedHash.take(16)}…"
+                    }
+                }
             } catch (e: Exception) { editStatus = "Ekspor gagal: ${e.message}" }
         }
     }
@@ -209,6 +190,7 @@ private fun EditorHome() {
                 Spacer(Modifier.height(7.dp))
                 Text(fileName, color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text(if (size > 0) "$size byte" else "Import savedLife.data untuk membuka fitur editor", color = Muted, fontSize = 11.sp)
+                if (sourceHash.isNotEmpty()) Text("SHA-256 sumber: ${sourceHash.take(16)}…", color = Muted, fontSize = 9.sp)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { openFile.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.FolderOpen, null)
@@ -261,38 +243,56 @@ private fun EditorHome() {
                                 onDismissRequest = { presetMenuExpanded = false },
                                 modifier = Modifier.heightIn(max = 360.dp)
                             ) {
-                                balancePresets.forEach { (label, _) ->
+                                balancePresets.forEach { (label, amount) ->
                                     DropdownMenuItem(
                                         text = { Text(label) },
                                         onClick = {
                                             selectedBalancePreset = label
+                                            customBalanceText = String.format(Locale.US, "%.0f", amount)
                                             presetMenuExpanded = false
                                         }
                                     )
                                 }
                             }
                         }
+                        OutlinedTextField(
+                            value = customBalanceText,
+                            onValueChange = { customBalanceText = it },
+                            label = { Text("Nominal saldo") },
+                            placeholder = { Text("Contoh: 2000000000") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        val parsedAmount = parseBalanceAmount(customBalanceText)
+                        val amountValid = parsedAmount != null && parsedAmount.isFinite() && parsedAmount >= 0.0 && parsedAmount <= 1.0e18
                         Text(
-                            "Nominal: " + String.format(Locale.US, "%,.0f", balancePresets.first { it.first == selectedBalancePreset }.second),
-                            color = Muted,
+                            if (amountValid) "Target: " + String.format(Locale.US, "%,.0f", parsedAmount!!)
+                            else "Masukkan nominal valid antara 0 sampai 1 kuintiliun.",
+                            color = if (amountValid) Good else Color(0xFFFFC56E),
                             fontSize = 11.sp
                         )
                         Spacer(Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                val amount = balancePresets.first { it.first == selectedBalancePreset }.second
+                                val amount = parseBalanceAmount(customBalanceText)
                                 val original = sourceBytes
-                                if (amount == null || !amount.isFinite() || amount < 0.0 || amount > 1.0e18 || original == null) {
-                                    editStatus = "Nominal tidak valid."
+                                val patched = if (amount != null && original != null) {
+                                    BalancePatchEngine.patch(original, slot, amount)
+                                } else null
+                                if (patched == null || amount == null) {
+                                    editedBytes = null
+                                    editedBalanceAmount = null
+                                    editedHash = ""
+                                    editStatus = "Patch dibatalkan: nominal atau struktur save gagal diverifikasi."
                                 } else {
-                                    val patched = original.copyOf()
-                                    ByteBuffer.wrap(patched, slot.offset, 8).order(ByteOrder.LITTLE_ENDIAN).putDouble(amount)
                                     editedBytes = patched
-                                    editStatus = "Saldo diubah pada salinan. Ekspor save hasil edit untuk menyimpan."
+                                    editedBalanceAmount = amount
+                                    editedHash = BalancePatchEngine.sha256(patched)
+                                    editStatus = "Salinan berhasil dipatch dan diverifikasi. Save asli tetap utuh."
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Terapkan perubahan") }
+                        ) { Text("Terapkan perubahan ke salinan") }
                         OutlinedButton(
                             onClick = { exportEdited.launch("savedLife_edited.data") },
                             enabled = editedBytes != null,
@@ -301,7 +301,8 @@ private fun EditorHome() {
                     }
                     Spacer(Modifier.height(8.dp))
                     Text("Status: $editStatus", color = Muted, fontSize = 10.sp)
-                    Text("Editor uang masih eksperimental. Selalu uji file hasil edit; file asli tidak ditimpa.", color = Color(0xFFFFC56E), fontSize = 10.sp)
+                    if (editedHash.isNotEmpty()) Text("SHA-256 hasil: ${editedHash.take(16)}…", color = Muted, fontSize = 9.sp)
+                    Text("Eksperimental: validasi header NRBF lalu ubah 8-byte kandidat Double. Ini belum parser/serializer BinaryFormatter penuh; wajib uji di BitLife dan jangan timpa save asli.", color = Color(0xFFFFC56E), fontSize = 10.sp)
                 }
             }
         }
@@ -324,6 +325,6 @@ private fun EditorHome() {
         }
         Text(editStatus, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
-        Text("ADI LABS · ALPHA 0.6 · FEATURE DASHBOARD", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("ADI LABS · ALPHA 0.7 · GUARDED MONEY PATCH", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
