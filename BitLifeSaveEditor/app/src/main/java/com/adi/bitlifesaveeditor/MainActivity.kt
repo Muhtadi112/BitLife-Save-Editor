@@ -226,7 +226,7 @@ private fun EditorHome() {
         Text("FITUR EDITOR", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
         Spacer(Modifier.height(9.dp))
 
-        FeatureCard("💰  Uang", "Atur saldo karakter", "TERSEDIA", active = true) {
+        FeatureCard("💰  Uang", "Edit saldo bank (BankBalance)", "TERSEDIA", active = true) {
             expandedFeature = if (expandedFeature == "Uang") "" else "Uang"
         }
         if (expandedFeature == "Uang") {
@@ -237,9 +237,9 @@ private fun EditorHome() {
                     if (slot == null) {
                         Text("Import save dengan struktur yang dikenali untuk mengaktifkan editor uang.", color = Muted, fontSize = 12.sp)
                     } else {
-                        Text("Saldo terdeteksi", color = Muted, fontSize = 10.sp)
+                        Text("Saldo bank terdeteksi", color = Muted, fontSize = 10.sp)
                         Text(String.format(Locale.US, "%,.2f", slot.value), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                        Text("Kandidat field · offset 0x${slot.offset.toString(16).uppercase(Locale.US)}", color = Muted, fontSize = 10.sp)
+                        Text("BankBalance · Finances · offset 0x${slot.offset.toString(16).uppercase(Locale.US)}", color = Muted, fontSize = 10.sp)
                         Spacer(Modifier.height(10.dp))
                         Text("Pilih nominal saldo", color = Muted, fontSize = 10.sp)
                         Spacer(Modifier.height(5.dp))
@@ -315,7 +315,7 @@ private fun EditorHome() {
                     Spacer(Modifier.height(8.dp))
                     Text("Status: $editStatus", color = Muted, fontSize = 10.sp)
                     if (editedHash.isNotEmpty()) Text("SHA-256 hasil: ${editedHash.take(16)}…", color = Muted, fontSize = 9.sp)
-                    Text("Eksperimental: validasi header NRBF lalu ubah 8-byte kandidat Double. Ini belum parser/serializer BinaryFormatter penuh; wajib uji di BitLife dan jangan timpa save asli.", color = Color(0xFFFFC56E), fontSize = 10.sp)
+                    Text("Patch fixed-layout: memeriksa header NRBF dan metadata Life.Finances/SimFinances/BankBalance. Pemetaan field dicocokkan dengan decoder NRBF aman pada dua revisi save; ini belum parser/serializer penuh dan belum menjamin BitLife menerima hasilnya. Selalu uji salinan, jangan timpa save asli.", color = Color(0xFFFFC56E), fontSize = 10.sp)
                 }
             }
         }
@@ -338,6 +338,6 @@ private fun EditorHome() {
         }
         Text(editStatus, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
-        Text("ADI LABS · ALPHA 0.7 · GUARDED MONEY PATCH", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("ADI LABS · ALPHA 0.8 · BANK BALANCE PATCH", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
