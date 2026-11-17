@@ -20,6 +20,14 @@ jobs:
         working-directory: BitLifeSaveEditor
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Fetch real save regression fixtures
+        run: |
+          git fetch origin main --depth=2
+          git show origin/main^:savedLife.data > /tmp/bitlife-old.data
+          git show origin/main:savedLife.data > /tmp/bitlife-new.data
+          sha256sum /tmp/bitlife-old.data /tmp/bitlife-new.data
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -28,6 +36,9 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Run unit tests
+        env:
+          BITLIFE_OLD_SAVE: /tmp/bitlife-old.data
+          BITLIFE_NEW_SAVE: /tmp/bitlife-new.data
         run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
