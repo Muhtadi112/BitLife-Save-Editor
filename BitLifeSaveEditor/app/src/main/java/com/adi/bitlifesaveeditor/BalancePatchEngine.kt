@@ -11,30 +11,50 @@ internal data class BalanceSlot(
 )
 
 /**
- * Guarded fixed-width patcher for the currently observed BitLife NRBF save layout.
+ * Conservative fixed-width patcher for the BitLife NRBF layout validated so far.
  *
- * This is intentionally NOT a general BinaryFormatter deserializer/serializer.
- * The candidate location is based on the existing controlled-save comparison:
- * 19 bytes after the unique "SimBankLoan" marker. The app validates the NRBF
- * stream header and known type markers, then changes exactly one little-endian
- * Double on a copy. Cross-version and in-game acceptance still require testing.
+ * The safe .NET NRBF reader identified the actual field as:
+ * Life.<Finances>k__BackingField -> SimFinances.<BankBalance>k__BackingField.
+ * In two real revisions, its value bytes were 19 bytes after the unique
+ * "SimBankLoan" type-metadata marker (not a live SimBankLoan object):
+ *  - old save: 0xF2A3 = 1,000,000,000.0
+ *  - new save: 0xF29F = 853,244.6095520258
+ *
+ * This is NOT a general BinaryFormatter parser/serializer. The engine fails
+ * closed unless the known NRBF + finance metadata signature is present, and
+ * only patches a copied file. Other BitLife layouts still need validation.
  */
 internal object BalancePatchEngine {
     private const val MARKER = "SimBankLoan"
     private const val OFFSET_AFTER_MARKER = 19
+    private const val FINANCES_FIELD = "<Finances>k__BackingField"
+    private const val FINANCE_TYPE = "SimFinances"
+    private const val BANK_BALANCE_FIELD = "<BankBalance>k__BackingField"
     internal const val MAX_BALANCE = 1.0e18
 
     fun inspect(data: ByteArray): BalanceSlot? {
         if (!hasNrbfHeader(data)) return null
-        if (!containsAscii(data, "Assembly-CSharp") || !containsAscii(data, "Life3")) return null
+        if (findOccurrences(data, "Assembly-CSharp".toByteArray(Charsets.US_ASCII)).isEmpty()) return null
 
         val markerBytes = MARKER.toByteArray(Charsets.US_ASCII)
-        val hits = findOccurrences(data, markerBytes)
-        if (hits.size != 1) return null
+        val markerHits = findOccurrences(data, markerBytes)
+        if (markerHits.size != 1) return null
 
-        val markerOffset = hits.single()
+        val markerOffset = markerHits.single()
+        val financesHits = findOccurrences(data, FINANCES_FIELD.toByteArray(Charsets.US_ASCII))
+        val financeTypeHits = findOccurrences(data, FINANCE_TYPE.toByteArray(Charsets.US_ASCII))
+        val bankBalanceHits = findOccurrences(data, BANK_BALANCE_FIELD.toByteArray(Charsets.US_ASCII))
+
+        // Require the root Finances reference, SimFinances type metadata and
+        // BankBalance member metadata to precede the candidate's metadata anchor.
+        if (financesHits.none { it < markerOffset }) return null
+        if (financeTypeHits.none { it < markerOffset }) return null
+        if (bankBalanceHits.none { it < markerOffset }) return null
+
         val valueOffset = markerOffset + OFFSET_AFTER_MARKER
-        if (valueOffset < markerOffset + markerBytes.size || valueOffset + java.lang.Double.BYTES > data.size) {
+        if (valueOffset < markerOffset + markerBytes.size ||
+            valueOffset + java.lang.Double.BYTES > data.size
+        ) {
             return null
         }
 
@@ -95,9 +115,6 @@ internal object BalancePatchEngine {
         val minorVersion = header.int
         return rootId > 0 && headerId == -1 && majorVersion == 1 && minorVersion == 0
     }
-
-    private fun containsAscii(data: ByteArray, value: String): Boolean =
-        findOccurrences(data, value.toByteArray(Charsets.US_ASCII)).isNotEmpty()
 
     private fun findOccurrences(data: ByteArray, pattern: ByteArray): List<Int> {
         if (pattern.isEmpty() || pattern.size > data.size) return emptyList()
