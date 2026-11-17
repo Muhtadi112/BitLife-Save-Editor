@@ -1,0 +1,46 @@
+name: Probe BitLife NRBF Finance Fields
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [alpha-0.2-development]
+    paths:
+      - 'tools/NrbfProbe/**'
+      - '.github/workflows/probe-nrbf.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: alpha-0.2-development
+          fetch-depth: 1
+
+      - name: Get two committed save revisions
+        shell: bash
+        run: |
+          git fetch origin main --depth=2
+          git show origin/main^:savedLife.data > /tmp/old.data
+          git show origin/main:savedLife.data > /tmp/new.data
+          sha256sum /tmp/old.data /tmp/new.data
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Decode NRBF without BinaryFormatter
+        run: |
+          dotnet run --project tools/NrbfProbe/NrbfProbe.csproj -- /tmp/old.data /tmp/new.data | tee nrbf-finance-probe.txt
+
+      - name: Upload structural report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitlife-nrbf-finance-probe
+          path: nrbf-finance-probe.txt
+          retention-days: 7
