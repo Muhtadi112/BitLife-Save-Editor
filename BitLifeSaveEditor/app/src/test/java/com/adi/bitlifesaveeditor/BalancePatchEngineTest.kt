@@ -10,8 +10,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class BalancePatchEngineTest {
-    private fun fixture(): ByteArray {
-        val data = ByteArray(512)
+    private fun fixture(
+        includeFinancesReference: Boolean = true,
+        includeFinanceType: Boolean = true,
+        includeBankBalanceField: Boolean = true
+    ): ByteArray {
+        val data = ByteArray(640)
         data[0] = 0 // SerializedStreamHeader record
         ByteBuffer.wrap(data, 1, 16).order(ByteOrder.LITTLE_ENDIAN)
             .putInt(1)   // root id
@@ -20,10 +24,19 @@ class BalancePatchEngineTest {
             .putInt(0)   // minor version
 
         "Assembly-CSharp".toByteArray(Charsets.US_ASCII).copyInto(data, 24)
-        "Life3".toByteArray(Charsets.US_ASCII).copyInto(data, 64)
+        "Life".toByteArray(Charsets.US_ASCII).copyInto(data, 64)
+        if (includeFinancesReference) {
+            "<Finances>k__BackingField".toByteArray(Charsets.US_ASCII).copyInto(data, 88)
+        }
+        if (includeFinanceType) {
+            "SimFinances".toByteArray(Charsets.US_ASCII).copyInto(data, 160)
+        }
+        if (includeBankBalanceField) {
+            "<BankBalance>k__BackingField".toByteArray(Charsets.US_ASCII).copyInto(data, 192)
+        }
 
         val marker = "SimBankLoan".toByteArray(Charsets.US_ASCII)
-        val markerOffset = 128
+        val markerOffset = 320
         marker.copyInto(data, markerOffset)
         ByteBuffer.wrap(data, markerOffset + 19, java.lang.Double.BYTES)
             .order(ByteOrder.LITTLE_ENDIAN)
@@ -32,11 +45,11 @@ class BalancePatchEngineTest {
     }
 
     @Test
-    fun inspectsNrbfHeaderAndUniqueBalanceCandidate() {
+    fun inspectsNrbfHeaderAndFinanceFieldSignature() {
         val slot = BalancePatchEngine.inspect(fixture())
         assertNotNull(slot)
-        assertEquals(147, slot!!.offset)
-        assertEquals(128, slot.markerOffset)
+        assertEquals(339, slot!!.offset)
+        assertEquals(320, slot.markerOffset)
         assertEquals(1000.0, slot.value, 0.0)
     }
 
@@ -48,9 +61,24 @@ class BalancePatchEngineTest {
     }
 
     @Test
-    fun rejectsDuplicateLoanMarker() {
+    fun rejectsMissingFinancesReference() {
+        assertNull(BalancePatchEngine.inspect(fixture(includeFinancesReference = false)))
+    }
+
+    @Test
+    fun rejectsMissingSimFinancesTypeMetadata() {
+        assertNull(BalancePatchEngine.inspect(fixture(includeFinanceType = false)))
+    }
+
+    @Test
+    fun rejectsMissingBankBalanceFieldMetadata() {
+        assertNull(BalancePatchEngine.inspect(fixture(includeBankBalanceField = false)))
+    }
+
+    @Test
+    fun rejectsDuplicateLoanMetadataAnchor() {
         val data = fixture()
-        "SimBankLoan".toByteArray(Charsets.US_ASCII).copyInto(data, 300)
+        "SimBankLoan".toByteArray(Charsets.US_ASCII).copyInto(data, 500)
         assertNull(BalancePatchEngine.inspect(data))
     }
 
