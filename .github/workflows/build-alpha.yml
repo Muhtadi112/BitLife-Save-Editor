@@ -7,6 +7,9 @@ on:
     paths:
       - 'BitLifeSaveEditor/**'
       - '.github/workflows/build-alpha.yml'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
