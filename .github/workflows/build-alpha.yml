@@ -1,0 +1,52 @@
+name: Build BitLife Save Editor Alpha 0.9
+
+on:
+  push:
+    branches:
+      - alpha-0.3-development
+    paths:
+      - 'BitLifeSaveEditor/**'
+      - '.github/workflows/build-alpha.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BitLifeSaveEditor
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Fetch real save regression fixtures
+        run: |
+          git fetch origin main --depth=2
+          git show origin/main^:savedLife.data > /tmp/bitlife-old.data
+          git show origin/main:savedLife.data > /tmp/bitlife-new.data
+          sha256sum /tmp/bitlife-old.data /tmp/bitlife-new.data
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Run unit tests
+        env:
+          BITLIFE_OLD_SAVE: /tmp/bitlife-old.data
+          BITLIFE_NEW_SAVE: /tmp/bitlife-new.data
+        run: gradle --no-daemon testDebugUnitTest
+      - name: Build debug APK
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BitLifeSaveEditor-alpha-0.9-debug-apk
+          path: BitLifeSaveEditor/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
