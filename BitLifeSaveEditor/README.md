@@ -2,15 +2,17 @@
 
 Offline Android app built with Kotlin and Jetpack Compose. Package: `com.adi.bitlifesaveeditor`.
 
-## Current Alpha 0.8 scope
+## Current Alpha 0.9 scope
 
 - Import `savedLife.data` through Android Storage Access Framework (no root and no broad storage permission).
 - Keep imported source bytes separate from the edited copy.
-- Export an unchanged backup to a new destination.
+- Enforce a 64 MiB import limit and clear the previous selection before a new import.
+- Export an unchanged backup to a new destination, then reopen it and compare every byte with the original.
 - Money Editor for the serialized `Life.Finances.<BankBalance>k__BackingField` value.
 - Preset and custom balance amounts.
+- Invalidate any previous edited copy when the target amount changes, preventing export of a stale amount.
 - SHA-256 fingerprints for source and edited copies.
-- Final verification: file length is unchanged, the detected value equals the requested amount, and every byte outside the exact 8-byte Double range is unchanged.
+- Verify the edited byte array before writing, then reopen the exported document and verify exact bytes, target balance, unchanged file length, and unchanged bytes outside the 8-byte Double field.
 - Synthetic unit tests plus a regression test against two real save revisions.
 
 ## Money field mapping and limitations
@@ -26,7 +28,7 @@ The `SimBankLoan` text is a metadata anchor in this layout; the decoder found no
 
 The Android implementation is still a **guarded fixed-layout patcher**, not a general NRBF parser/serializer. It checks the NRBF header, `Assembly-CSharp`, the root `Finances` member, `SimFinances`, `BankBalance`, and a unique metadata anchor before editing. Unknown layouts are rejected. The two-save check does not prove compatibility with every BitLife release or that the game will accept every exported save.
 
-**Never overwrite the original.** Export to a new filename, keep a separate backup, and test the edited copy in BitLife before replacing any active save.
+**Never overwrite the original.** Export to a new filename, keep a separate backup, and test the edited copy in BitLife before replacing any active save. A successful read-back check proves the document provider returned the expected bytes; it does not prove BitLife accepts the save.
 
 ## Offline and permissions
 
@@ -34,10 +36,10 @@ The Android manifest requests no Internet permission. The app performs file sele
 
 ## Build APK with GitHub Actions
 
-1. Open the `alpha-0.2-development` branch.
-2. Open **Actions** and run **Build BitLife Save Editor Alpha 0.8**, or push a change under `BitLifeSaveEditor/`.
-3. The workflow runs unit tests against synthetic fixtures and two committed save revisions, then builds the debug APK.
-4. Download the `BitLifeSaveEditor-alpha-0.8-debug-apk` artifact.
+1. Open the `alpha-0.3-development` branch.
+2. Open **Actions** and run **Build BitLife Save Editor Alpha 0.9**, or push a change under `BitLifeSaveEditor/`.
+3. The workflow runs unit tests against synthetic fixtures and two real save revisions, then builds the debug APK.
+4. Download the `BitLifeSaveEditor-alpha-0.9-debug-apk` artifact.
 5. Extract the artifact ZIP to obtain `app-debug.apk`.
 
 Build uses JDK 17 and Gradle 8.9. Android configuration: compile SDK 35, target SDK 35 (Android 15), minimum SDK 26.
