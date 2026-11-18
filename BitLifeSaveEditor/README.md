@@ -37,7 +37,7 @@ The Android manifest requests no Internet permission. The app performs file sele
 ## Build APK with GitHub Actions
 
 1. Open the `alpha-0.3-development` branch.
-2. Open **Actions** and run **Build BitLife Save Editor Alpha 0.9**, or push a change under `BitLifeSaveEditor/`.
+2. Open **Actions** and run **Build BitLife Save Editor Alpha 0.9**, push a change under `BitLifeSaveEditor/`, or open a pull request to `main` for CI validation.
 3. The workflow runs unit tests against synthetic fixtures and two real save revisions, then builds the debug APK.
 4. Download the `BitLifeSaveEditor-alpha-0.9-debug-apk` artifact.
 5. Extract the artifact ZIP to obtain `app-debug.apk`.
