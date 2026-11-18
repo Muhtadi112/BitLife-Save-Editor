@@ -185,6 +185,8 @@ private fun EditorHome() {
             } catch (e: Exception) {
                 sourceBytes = null
                 balanceSlot = null
+                sourceHash = ""
+                size = 0L
                 fileName = "Save gagal dibaca"
                 editStatus = "Gagal membuka save: ${e.message ?: e.javaClass.simpleName}"
             } finally {
@@ -199,7 +201,7 @@ private fun EditorHome() {
             try {
                 val readBack = writeAndReadBack(context, uri, source)
                 if (readBack == null || !ExportVerifier.verifyBackup(source, readBack)) {
-                    editStatus = "Backup ditulis, tetapi verifikasi baca ulang gagal atau berbeda. Jangan gunakan file ini."
+                    editStatus = "Backup tidak dapat diverifikasi saat dibaca ulang. Jangan gunakan file ini."
                 } else {
                     val verifiedHash = BalancePatchEngine.sha256(readBack)
                     editStatus = "Backup berhasil diekspor dan diverifikasi byte demi byte. SHA-256: ${verifiedHash.take(16)}…"
@@ -225,7 +227,7 @@ private fun EditorHome() {
                         !ExportVerifier.verifyEdited(original, bytes, readBack, slot, expectedAmount) ||
                         BalancePatchEngine.sha256(readBack) != editedHash
                     ) {
-                        editStatus = "File sudah ditulis, tetapi verifikasi baca ulang gagal. Jangan gunakan atau pasang save ini."
+                        editStatus = "Ekspor tidak dapat diverifikasi saat dibaca ulang. Jangan gunakan atau pasang file ini."
                     } else {
                         editStatus = "Save hasil edit lolos verifikasi sebelum dan sesudah ekspor. SHA-256: ${editedHash.take(16)}…"
                     }
