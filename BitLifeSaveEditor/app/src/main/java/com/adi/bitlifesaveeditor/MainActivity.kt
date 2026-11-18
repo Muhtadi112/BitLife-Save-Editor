@@ -1,5 +1,6 @@
 package com.adi.bitlifesaveeditor
 
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -22,6 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.Locale
 
 private val Bg = Color(0xFF090B12)
@@ -29,6 +32,29 @@ private val Panel = Color(0xFF151927)
 private val Accent = Color(0xFF9B7BFF)
 private val Muted = Color(0xFF9AA3B7)
 private val Good = Color(0xFF69D6A4)
+
+private const val MAX_SAVE_BYTES = 64 * 1024 * 1024
+
+private fun readBounded(input: InputStream): ByteArray {
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var total = 0
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        if (count == 0) continue
+        total += count
+        require(total <= MAX_SAVE_BYTES) { "Ukuran save melewati batas 64 MiB." }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
+}
+
+private fun writeAndReadBack(context: Context, uri: Uri, expected: ByteArray): ByteArray? {
+    val output = context.contentResolver.openOutputStream(uri) ?: return null
+    output.use { it.write(expected) }
+    return context.contentResolver.openInputStream(uri)?.use { readBounded(it) }
+}
 
 private fun parseBalanceAmount(raw: String): Double? {
     val value = raw.trim().replace(" ", "")
@@ -91,7 +117,6 @@ private fun FeatureCard(
 @Composable
 private fun EditorHome() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var fileName by remember { mutableStateOf("Belum ada save dipilih") }
     var size by remember { mutableStateOf(0L) }
     var sourceBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -122,32 +147,49 @@ private fun EditorHome() {
     var expandedFeature by remember { mutableStateOf("Uang") }
     var busy by remember { mutableStateOf(false) }
 
+    fun invalidateEditedCopy(message: String) {
+        editedBytes = null
+        editedBalanceAmount = null
+        editedHash = ""
+        editStatus = message
+    }
+
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            selectedUri = uri
+            // Clear the previous selection first so a failed import cannot leave
+            // an older save silently available for export.
+            sourceBytes = null
+            editedBytes = null
+            balanceSlot = null
+            editedBalanceAmount = null
+            sourceHash = ""
+            editedHash = ""
+            size = 0L
+            fileName = "Membaca save..."
             busy = true
             try {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    val bytes = input.readBytes()
-                    sourceBytes = bytes.copyOf()
-                    editedBytes = null
-                    editedBalanceAmount = null
-                    editedHash = ""
-                    sourceHash = BalancePatchEngine.sha256(bytes)
-                    size = bytes.size.toLong()
-                    fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
-                    balanceSlot = BalancePatchEngine.inspect(bytes)
-                    selectedBalancePreset = "2 Miliar"
-                    customBalanceText = "2000000000"
-                    editStatus = if (balanceSlot != null) {
-                        "Save siap. Periksa saldo yang terdeteksi sebelum menerapkan."
-                    } else {
-                        "Header NRBF atau kandidat saldo tidak lolos validasi. Fitur uang dikunci untuk mencegah salah edit."
-                    }
-                } ?: run { editStatus = "File gagal dibaca." }
+                val bytes = context.contentResolver.openInputStream(uri)?.use { readBounded(it) }
+                    ?: throw IllegalStateException("File tidak dapat dibaca.")
+                sourceBytes = bytes.copyOf()
+                sourceHash = BalancePatchEngine.sha256(bytes)
+                size = bytes.size.toLong()
+                fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "BitLife save"
+                balanceSlot = BalancePatchEngine.inspect(bytes)
+                selectedBalancePreset = "2 Miliar"
+                customBalanceText = "2000000000"
+                editStatus = if (balanceSlot != null) {
+                    "Save siap. Periksa saldo yang terdeteksi sebelum menerapkan."
+                } else {
+                    "Header NRBF atau kandidat saldo tidak lolos validasi. Fitur uang dikunci untuk mencegah salah edit."
+                }
             } catch (e: Exception) {
+                sourceBytes = null
+                balanceSlot = null
+                fileName = "Save gagal dibaca"
                 editStatus = "Gagal membuka save: ${e.message ?: e.javaClass.simpleName}"
-            } finally { busy = false }
+            } finally {
+                busy = false
+            }
         }
     }
 
@@ -155,14 +197,16 @@ private fun EditorHome() {
         val source = sourceBytes
         if (uri != null && source != null) {
             try {
-                val output = context.contentResolver.openOutputStream(uri)
-                if (output == null) {
-                    editStatus = "Lokasi backup tidak dapat dibuka."
+                val readBack = writeAndReadBack(context, uri, source)
+                if (readBack == null || !ExportVerifier.verifyBackup(source, readBack)) {
+                    editStatus = "Backup ditulis, tetapi verifikasi baca ulang gagal atau berbeda. Jangan gunakan file ini."
                 } else {
-                    output.use { it.write(source.copyOf()) }
-                    editStatus = "Backup berhasil diekspor. Save asli tidak ditimpa."
+                    val verifiedHash = BalancePatchEngine.sha256(readBack)
+                    editStatus = "Backup berhasil diekspor dan diverifikasi byte demi byte. SHA-256: ${verifiedHash.take(16)}…"
                 }
-            } catch (e: Exception) { editStatus = "Backup gagal: ${e.message}" }
+            } catch (e: Exception) {
+                editStatus = "Backup gagal diverifikasi: ${e.message ?: e.javaClass.simpleName}"
+            }
         }
     }
 
@@ -174,17 +218,21 @@ private fun EditorHome() {
         if (uri != null && bytes != null && original != null && slot != null && expectedAmount != null) {
             try {
                 if (!BalancePatchEngine.verifyPatched(original, bytes, slot, expectedAmount)) {
-                    editStatus = "Verifikasi akhir gagal. File tidak diekspor."
+                    editStatus = "Verifikasi sebelum ekspor gagal. File tidak ditulis."
                 } else {
-                    val output = context.contentResolver.openOutputStream(uri)
-                    if (output == null) {
-                        editStatus = "Lokasi ekspor tidak dapat dibuka."
+                    val readBack = writeAndReadBack(context, uri, bytes)
+                    if (readBack == null ||
+                        !ExportVerifier.verifyEdited(original, bytes, readBack, slot, expectedAmount) ||
+                        BalancePatchEngine.sha256(readBack) != editedHash
+                    ) {
+                        editStatus = "File sudah ditulis, tetapi verifikasi baca ulang gagal. Jangan gunakan atau pasang save ini."
                     } else {
-                        output.use { it.write(bytes.copyOf()) }
-                        editStatus = "Save hasil edit lolos verifikasi byte dan berhasil diekspor. SHA-256: ${editedHash.take(16)}…"
+                        editStatus = "Save hasil edit lolos verifikasi sebelum dan sesudah ekspor. SHA-256: ${editedHash.take(16)}…"
                     }
                 }
-            } catch (e: Exception) { editStatus = "Ekspor gagal: ${e.message}" }
+            } catch (e: Exception) {
+                editStatus = "Ekspor gagal diverifikasi: ${e.message ?: e.javaClass.simpleName}"
+            }
         }
     }
 
@@ -262,6 +310,7 @@ private fun EditorHome() {
                                         onClick = {
                                             selectedBalancePreset = label
                                             customBalanceText = String.format(Locale.US, "%.0f", amount)
+                                            invalidateEditedCopy("Preset berubah. Terapkan ulang sebelum ekspor.")
                                             presetMenuExpanded = false
                                         }
                                     )
@@ -270,7 +319,10 @@ private fun EditorHome() {
                         }
                         OutlinedTextField(
                             value = customBalanceText,
-                            onValueChange = { customBalanceText = it },
+                            onValueChange = {
+                                customBalanceText = it
+                                invalidateEditedCopy("Nominal berubah. Terapkan ulang sebelum ekspor.")
+                            },
                             label = { Text("Nominal saldo") },
                             placeholder = { Text("Contoh: 2000000000") },
                             singleLine = true,
@@ -338,6 +390,6 @@ private fun EditorHome() {
         }
         Text(editStatus, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
-        Text("ADI LABS · ALPHA 0.8 · BANK BALANCE PATCH", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("ADI LABS · ALPHA 0.9 · VERIFIED EXPORT", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
