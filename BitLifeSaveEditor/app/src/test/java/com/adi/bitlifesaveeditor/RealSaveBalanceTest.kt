@@ -8,8 +8,8 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Regression check against two real save revisions decoded with Microsoft's
- * read-only System.Formats.Nrbf decoder in the companion probe workflow.
+ * Optional regression check against two real save revisions previously decoded
+ * with Microsoft's read-only System.Formats.Nrbf decoder.
  */
 class RealSaveBalanceTest {
     @Test

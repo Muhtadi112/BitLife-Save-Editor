@@ -7,8 +7,8 @@ import java.math.BigDecimal
  * values that would silently change when stored as the save's Float64 balance.
  */
 internal object BalanceAmountParser {
-    private val usGrouped = Regex("""^[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?$""")
-    private val euGrouped = Regex("""^[0-9]{1,3}(\\.[0-9]{3})+(,[0-9]+)?$""")
+    private val usGrouped = Regex("""^[0-9]{1,3}(,[0-9]{3})+(\.[0-9]+)?$""")
+    private val euGrouped = Regex("""^[0-9]{1,3}(\.[0-9]{3})+(,[0-9]+)?$""")
     private val plainDecimal = Regex("""^[0-9]+([.,][0-9]+)?$""")
 
     fun parse(raw: String): Double? {
