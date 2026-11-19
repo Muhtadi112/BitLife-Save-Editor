@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           git fetch origin main --prune
-          mapfile -t save_commits < <(git log origin/main --format='%H' -- savedLife.data | head -n 2)
+          mapfile -t save_commits < <(git -C "$GITHUB_WORKSPACE" log origin/main --format='%H' -- savedLife.data | head -n 2)
           if [ "${#save_commits[@]}" -ne 2 ]; then
             echo "Expected at least two commits that changed savedLife.data; found ${#save_commits[@]}."
             exit 1
