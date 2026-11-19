@@ -56,19 +56,6 @@ private fun writeAndReadBack(context: Context, uri: Uri, expected: ByteArray): B
     return context.contentResolver.openInputStream(uri)?.use { readBounded(it) }
 }
 
-private fun parseBalanceAmount(raw: String): Double? {
-    val value = raw.trim().replace(" ", "")
-    if (value.isEmpty()) return null
-    val normalized = when {
-        Regex("""^[0-9]{1,3}(,[0-9]{3})+(\.[0-9]+)?$""").matches(value) -> value.replace(",", "")
-        Regex("""^[0-9]{1,3}(\.[0-9]{3})+(,[0-9]+)?$""").matches(value) -> value.replace(".", "").replace(",", ".")
-        value.count { it == ',' } > 1 -> value.replace(",", "")
-        value.contains(',') && !value.contains('.') -> value.replace(',', '.')
-        else -> value
-    }
-    return normalized.toDoubleOrNull()
-}
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -330,18 +317,18 @@ private fun EditorHome() {
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        val parsedAmount = parseBalanceAmount(customBalanceText)
+                        val parsedAmount = BalanceAmountParser.parse(customBalanceText)
                         val amountValid = parsedAmount != null && parsedAmount.isFinite() && parsedAmount >= 0.0 && parsedAmount <= 1.0e18
                         Text(
-                            if (amountValid) "Target: " + String.format(Locale.US, "%,.0f", parsedAmount!!)
-                            else "Masukkan nominal valid antara 0 sampai 1 kuintiliun.",
+                            if (amountValid) "Target: " + String.format(Locale.US, "%,.2f", parsedAmount!!)
+                            else "Nominal harus 0–1 kuintiliun dan tidak boleh kehilangan presisi Double.",
                             color = if (amountValid) Good else Color(0xFFFFC56E),
                             fontSize = 11.sp
                         )
                         Spacer(Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                val amount = parseBalanceAmount(customBalanceText)
+                                val amount = BalanceAmountParser.parse(customBalanceText)
                                 val original = sourceBytes
                                 val patched = if (amount != null && original != null) {
                                     BalancePatchEngine.patch(original, slot, amount)
@@ -392,6 +379,6 @@ private fun EditorHome() {
         }
         Text(editStatus, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
-        Text("ADI LABS · ALPHA 0.9 · VERIFIED EXPORT", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("ADI LABS · ALPHA 0.9.1 · VERIFIED EXPORT", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }

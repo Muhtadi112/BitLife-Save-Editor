@@ -1,4 +1,4 @@
-name: Build BitLife Save Editor Alpha 0.9
+name: Build BitLife Save Editor Alpha 0.9.1
 
 on:
   push:
@@ -23,44 +23,21 @@ jobs:
         working-directory: BitLifeSaveEditor
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Fetch the two latest real save revisions
-        shell: bash
-        run: |
-          git fetch origin main --prune
-          mapfile -t save_commits < <(git -C "$GITHUB_WORKSPACE" log origin/main --format='%H' -- savedLife.data | head -n 2)
-          if [ "${#save_commits[@]}" -ne 2 ]; then
-            echo "Expected at least two commits that changed savedLife.data; found ${#save_commits[@]}."
-            exit 1
-          fi
-          new_commit="${save_commits[0]}"
-          old_commit="${save_commits[1]}"
-          echo "Older save commit: ${old_commit}"
-          echo "Newer save commit: ${new_commit}"
-          git show "${old_commit}:savedLife.data" > /tmp/bitlife-old.data
-          git show "${new_commit}:savedLife.data" > /tmp/bitlife-new.data
-          sha256sum /tmp/bitlife-old.data /tmp/bitlife-new.data
-          if cmp -s /tmp/bitlife-old.data /tmp/bitlife-new.data; then
-            echo "The two selected save revisions are identical; refusing to run a meaningless regression test."
-            exit 1
-          fi
-      - uses: actions/setup-java@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Run unit tests
-        env:
-          BITLIFE_OLD_SAVE: /tmp/bitlife-old.data
-          BITLIFE_NEW_SAVE: /tmp/bitlife-new.data
+      - name: Run unit tests (synthetic fixtures; no personal save files)
         run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: BitLifeSaveEditor-alpha-0.9-debug-apk
+          name: BitLifeSaveEditor-alpha-0.9.1-debug-apk
           path: BitLifeSaveEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

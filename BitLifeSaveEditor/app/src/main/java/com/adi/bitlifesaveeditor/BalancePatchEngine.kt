@@ -45,11 +45,16 @@ internal object BalancePatchEngine {
         val financeTypeHits = findOccurrences(data, FINANCE_TYPE.toByteArray(Charsets.US_ASCII))
         val bankBalanceHits = findOccurrences(data, BANK_BALANCE_FIELD.toByteArray(Charsets.US_ASCII))
 
-        // Require the root Finances reference, SimFinances type metadata and
-        // BankBalance member metadata to precede the candidate's metadata anchor.
-        if (financesHits.none { it < markerOffset }) return null
-        if (financeTypeHits.none { it < markerOffset }) return null
-        if (bankBalanceHits.none { it < markerOffset }) return null
+        // Use the nearest preceding occurrences and require the serialized
+        // metadata order: Life.Finances -> SimFinances -> BankBalance -> anchor.
+        // This is stricter than merely finding these words somewhere in the file.
+        val financesOffset = financesHits.lastOrNull { it < markerOffset } ?: return null
+        val financeTypeOffset = financeTypeHits.lastOrNull { it < markerOffset } ?: return null
+        val bankBalanceOffset = bankBalanceHits.lastOrNull { it < markerOffset } ?: return null
+        if (!(financesOffset < financeTypeOffset &&
+                financeTypeOffset < bankBalanceOffset &&
+                bankBalanceOffset < markerOffset)
+        ) return null
 
         val valueOffset = markerOffset + OFFSET_AFTER_MARKER
         if (valueOffset < markerOffset + markerBytes.size ||

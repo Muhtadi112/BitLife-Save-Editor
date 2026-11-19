@@ -21,8 +21,8 @@ android {
         applicationId = "com.adi.bitlifesaveeditor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.9.0-alpha"
+        versionCode = 7
+        versionName = "0.9.1-alpha"
     }
     buildFeatures { compose = true }
 }

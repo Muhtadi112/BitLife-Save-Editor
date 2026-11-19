@@ -3,6 +3,7 @@ package com.adi.bitlifesaveeditor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 
@@ -13,12 +14,16 @@ import java.io.File
 class RealSaveBalanceTest {
     @Test
     fun realSaveRevisionsMapToFinancesBankBalance() {
-        val oldPath = System.getenv("BITLIFE_OLD_SAVE") ?: return
-        val newPath = System.getenv("BITLIFE_NEW_SAVE") ?: return
+        val oldPath = System.getenv("BITLIFE_OLD_SAVE")
+        val newPath = System.getenv("BITLIFE_NEW_SAVE")
+        assumeTrue(
+            "Set BITLIFE_OLD_SAVE and BITLIFE_NEW_SAVE to run the opt-in real-save regression test",
+            !oldPath.isNullOrBlank() && !newPath.isNullOrBlank()
+        )
 
         val cases = listOf(
-            Triple(oldPath, 1_000_000_000.0, 0xF2A3),
-            Triple(newPath, 853_244.6095520258, 0xF29F)
+            Triple(oldPath!!, 1_000_000_000.0, 0xF2A3),
+            Triple(newPath!!, 853_244.6095520258, 0xF29F)
         )
 
         for ((path, expectedBalance, expectedOffset) in cases) {

@@ -13,7 +13,11 @@ class BalancePatchEngineTest {
     private fun fixture(
         includeFinancesReference: Boolean = true,
         includeFinanceType: Boolean = true,
-        includeBankBalanceField: Boolean = true
+        includeBankBalanceField: Boolean = true,
+        financesOffset: Int = 88,
+        financeTypeOffset: Int = 160,
+        bankBalanceOffset: Int = 192,
+        markerOffset: Int = 320
     ): ByteArray {
         val data = ByteArray(640)
         data[0] = 0 // SerializedStreamHeader record
@@ -26,17 +30,16 @@ class BalancePatchEngineTest {
         "Assembly-CSharp".toByteArray(Charsets.US_ASCII).copyInto(data, 24)
         "Life".toByteArray(Charsets.US_ASCII).copyInto(data, 64)
         if (includeFinancesReference) {
-            "<Finances>k__BackingField".toByteArray(Charsets.US_ASCII).copyInto(data, 88)
+            "<Finances>k__BackingField".toByteArray(Charsets.US_ASCII).copyInto(data, financesOffset)
         }
         if (includeFinanceType) {
-            "SimFinances".toByteArray(Charsets.US_ASCII).copyInto(data, 160)
+            "SimFinances".toByteArray(Charsets.US_ASCII).copyInto(data, financeTypeOffset)
         }
         if (includeBankBalanceField) {
-            "<BankBalance>k__BackingField".toByteArray(Charsets.US_ASCII).copyInto(data, 192)
+            "<BankBalance>k__BackingField".toByteArray(Charsets.US_ASCII).copyInto(data, bankBalanceOffset)
         }
 
         val marker = "SimBankLoan".toByteArray(Charsets.US_ASCII)
-        val markerOffset = 320
         marker.copyInto(data, markerOffset)
         ByteBuffer.wrap(data, markerOffset + 19, java.lang.Double.BYTES)
             .order(ByteOrder.LITTLE_ENDIAN)
@@ -79,6 +82,18 @@ class BalancePatchEngineTest {
     fun rejectsDuplicateLoanMetadataAnchor() {
         val data = fixture()
         "SimBankLoan".toByteArray(Charsets.US_ASCII).copyInto(data, 500)
+        assertNull(BalancePatchEngine.inspect(data))
+    }
+
+
+    @Test
+    fun rejectsFinanceMetadataInWrongOrder() {
+        val data = fixture(
+            financesOffset = 88,
+            bankBalanceOffset = 192,
+            financeTypeOffset = 240,
+            markerOffset = 400
+        )
         assertNull(BalancePatchEngine.inspect(data))
     }
 
