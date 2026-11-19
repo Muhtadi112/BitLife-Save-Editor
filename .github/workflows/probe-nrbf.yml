@@ -3,7 +3,7 @@ name: Probe BitLife NRBF Finance Fields
 on:
   workflow_dispatch:
   push:
-    branches: [alpha-0.2-development]
+    branches: [alpha-0.2-development, alpha-0.3-development]
     paths:
       - 'tools/NrbfProbe/**'
       - '.github/workflows/probe-nrbf.yml'
@@ -15,19 +15,31 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout development branch
+      - name: Checkout selected development branch
         uses: actions/checkout@v4
         with:
-          ref: alpha-0.2-development
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Get two committed save revisions
+      - name: Get the two latest commits that changed the real save
         shell: bash
         run: |
-          git fetch origin main --depth=2
-          git show origin/main^:savedLife.data > /tmp/old.data
-          git show origin/main:savedLife.data > /tmp/new.data
+          git fetch origin main --prune
+          mapfile -t save_commits < <(git log origin/main --format='%H' -- savedLife.data | head -n 2)
+          if [ "${#save_commits[@]}" -ne 2 ]; then
+            echo "Expected at least two commits that changed savedLife.data; found ${#save_commits[@]}."
+            exit 1
+          fi
+          new_commit="${save_commits[0]}"
+          old_commit="${save_commits[1]}"
+          echo "Older save commit: ${old_commit}"
+          echo "Newer save commit: ${new_commit}"
+          git show "${old_commit}:savedLife.data" > /tmp/old.data
+          git show "${new_commit}:savedLife.data" > /tmp/new.data
           sha256sum /tmp/old.data /tmp/new.data
+          if cmp -s /tmp/old.data /tmp/new.data; then
+            echo "The two selected save revisions are identical; refusing to run a meaningless probe."
+            exit 1
+          fi
 
       - name: Set up .NET 9
         uses: actions/setup-dotnet@v4
