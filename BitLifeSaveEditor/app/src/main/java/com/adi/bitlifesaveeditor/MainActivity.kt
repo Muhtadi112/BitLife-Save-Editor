@@ -107,6 +107,7 @@ private fun EditorHome() {
     var fileName by remember { mutableStateOf("Belum ada save dipilih") }
     var size by remember { mutableStateOf(0L) }
     var sourceBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var sourceUriString by remember { mutableStateOf<String?>(null) }
     var editedBytes by remember { mutableStateOf<ByteArray?>(null) }
     var balanceSlot by remember { mutableStateOf<BalanceSlot?>(null) }
     var selectedBalancePreset by remember { mutableStateOf("2 Miliar") }
@@ -146,6 +147,7 @@ private fun EditorHome() {
             // Clear the previous selection first so a failed import cannot leave
             // an older save silently available for export.
             sourceBytes = null
+            sourceUriString = null
             editedBytes = null
             balanceSlot = null
             editedBalanceAmount = null
@@ -157,6 +159,7 @@ private fun EditorHome() {
             try {
                 val bytes = context.contentResolver.openInputStream(uri)?.use { readBounded(it) }
                     ?: throw IllegalStateException("File tidak dapat dibaca.")
+                sourceUriString = uri.toString()
                 sourceBytes = bytes.copyOf()
                 sourceHash = BalancePatchEngine.sha256(bytes)
                 size = bytes.size.toLong()
@@ -171,6 +174,7 @@ private fun EditorHome() {
                 }
             } catch (e: Exception) {
                 sourceBytes = null
+                sourceUriString = null
                 balanceSlot = null
                 sourceHash = ""
                 size = 0L
@@ -185,7 +189,9 @@ private fun EditorHome() {
     val exportCopy = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val source = sourceBytes
         if (uri != null && source != null) {
-            try {
+            if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
+                editStatus = "Backup dibatalkan: URI sumber tidak tersedia atau tujuan sama dengan save asli. Pilih file baru."
+            } else try {
                 val readBack = writeAndReadBack(context, uri, source)
                 if (readBack == null || !ExportVerifier.verifyBackup(source, readBack)) {
                     editStatus = "Backup tidak dapat diverifikasi saat dibaca ulang. Jangan gunakan file ini."
@@ -205,7 +211,9 @@ private fun EditorHome() {
         val slot = balanceSlot
         val expectedAmount = editedBalanceAmount
         if (uri != null && bytes != null && original != null && slot != null && expectedAmount != null) {
-            try {
+            if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
+                editStatus = "Ekspor dibatalkan: URI sumber tidak tersedia atau tujuan sama dengan save asli. Pilih file baru."
+            } else try {
                 if (!BalancePatchEngine.verifyPatched(original, bytes, slot, expectedAmount)) {
                     editStatus = "Verifikasi sebelum ekspor gagal. File tidak ditulis."
                 } else {
@@ -216,7 +224,7 @@ private fun EditorHome() {
                     ) {
                         editStatus = "Ekspor tidak dapat diverifikasi saat dibaca ulang. Jangan gunakan atau pasang file ini."
                     } else {
-                        editStatus = "Save hasil edit lolos verifikasi sebelum dan sesudah ekspor. SHA-256: ${editedHash.take(16)}…"
+                        editStatus = "Salinan ekspor lolos verifikasi byte sebelum dan sesudah penulisan. Penerimaan BitLife belum diuji. SHA-256: ${editedHash.take(16)}…"
                     }
                 }
             } catch (e: Exception) {
@@ -263,7 +271,7 @@ private fun EditorHome() {
         Text("FITUR EDITOR", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
         Spacer(Modifier.height(9.dp))
 
-        FeatureCard("💰  Uang", "Edit saldo bank (BankBalance)", "TERSEDIA", active = true) {
+        FeatureCard("💰  Uang", "Edit kandidat saldo bank (BankBalance)", "EKSPERIMENTAL", active = true) {
             expandedFeature = if (expandedFeature == "Uang") "" else "Uang"
         }
         if (expandedFeature == "Uang") {
@@ -274,9 +282,9 @@ private fun EditorHome() {
                     if (slot == null) {
                         Text("Import save dengan struktur yang dikenali untuk mengaktifkan editor uang.", color = Muted, fontSize = 12.sp)
                     } else {
-                        Text("Saldo bank terdeteksi", color = Muted, fontSize = 10.sp)
+                        Text("Kandidat nilai saldo", color = Muted, fontSize = 10.sp)
                         Text(String.format(Locale.US, "%,.2f", slot.value), color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                        Text("BankBalance · Finances · offset 0x${slot.offset.toString(16).uppercase(Locale.US)}", color = Muted, fontSize = 10.sp)
+                        Text("BankBalance (kandidat) · Finances · offset 0x${slot.offset.toString(16).uppercase(Locale.US)}", color = Muted, fontSize = 10.sp)
                         Spacer(Modifier.height(10.dp))
                         Text("Pilih nominal saldo", color = Muted, fontSize = 10.sp)
                         Spacer(Modifier.height(5.dp))
@@ -342,7 +350,7 @@ private fun EditorHome() {
                                     editedBytes = patched
                                     editedBalanceAmount = amount
                                     editedHash = BalancePatchEngine.sha256(patched)
-                                    editStatus = "Salinan berhasil dipatch dan diverifikasi. Save asli tetap utuh."
+                                    editStatus = "Salinan kandidat berhasil dipatch dan lolos pemeriksaan byte. Penerimaan BitLife belum diuji; save asli tetap utuh."
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -379,6 +387,6 @@ private fun EditorHome() {
         }
         Text(editStatus, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
-        Text("ADI LABS · ALPHA 0.9.1 · VERIFIED EXPORT", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("ADI LABS · ALPHA 0.9.2 · BYTE-CHECKED / GAME TEST PENDING", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
