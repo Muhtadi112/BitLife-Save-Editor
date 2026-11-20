@@ -1,53 +1,47 @@
 # BitLife Save Editor — Android Edition by ADI
 
-Offline Android app built with Kotlin and Jetpack Compose. Package: `com.adi.bitlifesaveeditor`.
+Offline Android application built with Kotlin and Jetpack Compose. Package: `com.adi.bitlifesaveeditor`.
 
-## Current Alpha 0.9.1 scope
+## Alpha 0.9.2 status
 
-- Import `savedLife.data` through Android Storage Access Framework (no root and no broad storage permission).
-- Keep imported source bytes separate from the edited copy.
-- Enforce a 64 MiB import limit and clear the previous selection before a new import.
-- Export an unchanged backup to a new destination, then reopen it and compare every byte with the original.
-- Money Editor for the serialized `Life.Finances.<BankBalance>k__BackingField` value.
-- Preset and custom balance amounts.
-- Locale-aware amount parsing (Indonesian/European and US grouping) that rejects values which would silently round when converted to the serialized Double.
-- Invalidate any previous edited copy when the target amount changes, preventing export of a stale amount.
-- SHA-256 fingerprints for source and edited copies.
-- Verify the edited byte array before writing, then reopen the exported document and verify exact bytes, target balance, unchanged file length, and unchanged bytes outside the 8-byte Double field.
-- Synthetic unit tests plus a regression test against two real save revisions.
+This is an experimental build. It is not a general-purpose .NET BinaryFormatter/NRBF editor.
 
-## Money field mapping and limitations
+Implemented in the current source:
+- Import a save through Android's Storage Access Framework (no root and no broad storage permission).
+- Keep source bytes separate from the edited byte array.
+- Enforce a 64 MiB input limit.
+- Export an unchanged backup and compare every byte after reading it back.
+- Experimental fixed-layout Money Editor candidate for a Float64/Double balance field.
+- Reject missing source URI and reject export when the destination URI is exactly the imported source URI.
+- Reopen exported files and verify exact bytes, file length, the expected candidate value, and that bytes outside the 8-byte patch range are unchanged.
+- SHA-256 fingerprints for imported, edited, and exported copies.
+- JVM unit tests for the export-target guard and byte verifier.
 
-The actual field was checked using Microsoft's read-only `System.Formats.Nrbf` decoder, which reads NRBF records without invoking BinaryFormatter or loading serialized game types. In both inspected revisions, the decoded value of `Life.Finances.<BankBalance>k__BackingField` matched the Double at 19 bytes after the unique `SimBankLoan` type-metadata marker:
+## Critical Money Editor limitation
 
-| Save revision | Decoded BankBalance | Candidate byte offset |
-| --- | ---: | ---: |
-| Earlier save | 1,000,000,000.0 | `0xF2A3` |
-| Later save | 853,244.6095520258 | `0xF29F` |
+The current Android code is a **fixed-layout patcher**, not a complete NRBF parser or serializer. It checks an NRBF header and expected metadata strings, then reads a Double at a fixed offset from a metadata anchor. That is a conservative heuristic, not structural proof that every future BitLife save uses the same layout.
 
-The `SimBankLoan` text is a metadata anchor in this layout; the decoder found no instantiated `SimBankLoan` object in either inspected save. The candidate itself was confirmed to be the first serialized Double field of the `SimFinances` object, `<BankBalance>k__BackingField`.
+Earlier development notes report that a read-only NRBF decoder matched the candidate field against two save revisions. Those original save files are not present in this repository or this build workspace, and this CI workflow does not rerun that real-save analysis. The synthetic unit tests only validate the code against synthetic fixtures.
 
-The Android implementation is still a **guarded fixed-layout patcher**, not a general NRBF parser/serializer. It checks the NRBF header, `Assembly-CSharp`, the root `Finances` member, `SimFinances`, `BankBalance`, and a unique metadata anchor before editing. Unknown layouts are rejected. The two-save check does not prove compatibility with every BitLife release or that the game will accept every exported save.
+A byte-for-byte export check proves that the destination contains the bytes the app intended to write. It **does not** prove that BitLife accepts the save or that the edited field is semantically correct.
 
-**Never overwrite the original.** Export to a new filename, keep a separate backup, and test the edited copy in BitLife before replacing any active save. A successful read-back check proves the document provider returned the expected bytes; it does not prove BitLife accepts the save.
+**Do not replace the active save.** Export under a new filename, preserve a separate backup, and test the exported copy in BitLife first. Stop if BitLife reports a corrupt save or the displayed balance does not match.
 
-## Offline and permissions
+## Implemented vs. not implemented
 
-The Android manifest requests no Internet permission. The app performs file selection and export through Android's Storage Access Framework. GitHub Actions and the .NET probe are development/build tools only; they are not required at runtime.
+- Money Editor: experimental fixed-layout candidate patch only.
+- Backup export: implemented with read-back byte verification.
+- Restore: not implemented as a dedicated workflow.
+- Age, Character Stats, Family & Relationships, Career & Education, and Assets: not implemented.
 
-## CI and save privacy
+## Offline/runtime permissions
 
-- The normal Android build workflow runs synthetic unit tests and builds the APK; it does not fetch, patch, or upload personal `savedLife.data` files.
-- The real-save regression test is opt-in and runs only when `BITLIFE_OLD_SAVE` and `BITLIFE_NEW_SAVE` are explicitly supplied to a local test run.
-- `tools/NrbfProbe` is a local development utility. Do not commit personal save files or upload them as workflow artifacts.
-- This repository has previously contained `savedLife.data` in its public Git history. Deleting the latest copy alone does not erase historical commits. Make the repository private and rewrite/purge the exposed history if the save is personal.
+The Android manifest requests no Internet permission. File selection and export use Android's Storage Access Framework. GitHub Actions is only used to build/test the APK; it is not needed when the app runs.
 
-## Build APK with GitHub Actions
+## CI
 
-1. Open the `alpha-0.3-development` branch.
-2. Open **Actions** and run **Build BitLife Save Editor Alpha 0.9.1**, push a change under `BitLifeSaveEditor/`, or open a pull request to `main` for CI validation.
-3. The workflow runs the synthetic unit tests and builds the debug APK. The opt-in real-save regression test is skipped unless both save paths are explicitly provided.
-4. Download the `BitLifeSaveEditor-alpha-0.9.1-debug-apk` artifact.
-5. Extract the artifact ZIP to obtain `app-debug.apk`.
+The Alpha 0.9.2 workflow runs JVM unit tests and builds a debug APK using JDK 17 and Gradle 8.9. It does not access personal save files and does not upload save files as artifacts.
 
-Build uses JDK 17 and Gradle 8.9. Android configuration: compile SDK 35, target SDK 35 (Android 15), minimum SDK 26.
+## Save privacy
+
+Never commit personal `savedLife.data` files to this repository. Earlier repository history reportedly included a save file; removing the latest copy alone does not remove historical copies. Keep the repository private and purge exposed history if that save is personal.
