@@ -1,9 +1,10 @@
-name: Build BitLife Save Editor Alpha 0.9.1
+name: Build BitLife Save Editor Alpha 0.9.2
 
 on:
   push:
     branches:
       - alpha-0.3-development
+      - alpha-0.4-development
     paths:
       - 'BitLifeSaveEditor/**'
       - '.github/workflows/build-alpha.yml'
@@ -38,6 +39,6 @@ jobs:
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: BitLifeSaveEditor-alpha-0.9.1-debug-apk
+          name: BitLifeSaveEditor-alpha-0.9.2-debug-apk
           path: BitLifeSaveEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
