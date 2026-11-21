@@ -50,6 +50,11 @@ private fun readBounded(input: InputStream): ByteArray {
     return output.toByteArray()
 }
 
+private fun readSourceSnapshot(context: Context, sourceUri: String?): ByteArray? {
+    val uri = sourceUri?.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: return null
+    return context.contentResolver.openInputStream(uri)?.use { readBounded(it) }
+}
+
 private fun writeAndReadBack(context: Context, uri: Uri, expected: ByteArray): ByteArray? {
     val output = context.contentResolver.openOutputStream(uri) ?: return null
     output.use { it.write(expected) }
@@ -189,15 +194,21 @@ private fun EditorHome() {
     val exportCopy = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val source = sourceBytes
         if (uri != null && source != null) {
-            if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
+            val currentSource = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
+            if (!SourceSnapshotGuard.matches(source, currentSource)) {
+                editStatus = "Backup dibatalkan: save sumber berubah atau tidak bisa dibaca ulang sejak diimpor. Impor ulang sebelum ekspor."
+            } else if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
                 editStatus = "Backup dibatalkan: URI sumber tidak tersedia atau tujuan sama dengan save asli. Pilih file baru."
             } else try {
                 val readBack = writeAndReadBack(context, uri, source)
-                if (readBack == null || !ExportVerifier.verifyBackup(source, readBack)) {
+                val sourceAfterExport = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
+                if (!SourceSnapshotGuard.matches(source, sourceAfterExport)) {
+                    editStatus = "Backup dibuat, tetapi sumber berubah selama ekspor atau tidak bisa dibaca ulang. Buang hasil backup dan impor ulang."
+                } else if (readBack == null || !ExportVerifier.verifyBackup(source, readBack)) {
                     editStatus = "Backup tidak dapat diverifikasi saat dibaca ulang. Jangan gunakan file ini."
                 } else {
                     val verifiedHash = BalancePatchEngine.sha256(readBack)
-                    editStatus = "Backup berhasil diekspor dan diverifikasi byte demi byte. SHA-256: ${verifiedHash.take(16)}…"
+                    editStatus = "Backup berhasil diekspor; sumber tetap sama dan hasil cocok byte demi byte. SHA-256: ${verifiedHash.take(16)}…"
                 }
             } catch (e: Exception) {
                 editStatus = "Backup gagal diverifikasi: ${e.message ?: e.javaClass.simpleName}"
@@ -211,20 +222,26 @@ private fun EditorHome() {
         val slot = balanceSlot
         val expectedAmount = editedBalanceAmount
         if (uri != null && bytes != null && original != null && slot != null && expectedAmount != null) {
-            if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
+            val currentSource = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
+            if (!SourceSnapshotGuard.matches(original, currentSource)) {
+                editStatus = "Ekspor dibatalkan: save sumber berubah atau tidak bisa dibaca ulang sejak diimpor. Impor ulang dan terapkan edit lagi."
+            } else if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
                 editStatus = "Ekspor dibatalkan: URI sumber tidak tersedia atau tujuan sama dengan save asli. Pilih file baru."
             } else try {
                 if (!BalancePatchEngine.verifyPatched(original, bytes, slot, expectedAmount)) {
                     editStatus = "Verifikasi sebelum ekspor gagal. File tidak ditulis."
                 } else {
                     val readBack = writeAndReadBack(context, uri, bytes)
-                    if (readBack == null ||
+                    val sourceAfterExport = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
+                    if (!SourceSnapshotGuard.matches(original, sourceAfterExport)) {
+                        editStatus = "Salinan sudah ditulis, tetapi sumber berubah selama ekspor atau tidak bisa dibaca ulang. Buang hasil ekspor; jangan pasang di BitLife."
+                    } else if (readBack == null ||
                         !ExportVerifier.verifyEdited(original, bytes, readBack, slot, expectedAmount) ||
                         BalancePatchEngine.sha256(readBack) != editedHash
                     ) {
                         editStatus = "Ekspor tidak dapat diverifikasi saat dibaca ulang. Jangan gunakan atau pasang file ini."
                     } else {
-                        editStatus = "Salinan ekspor lolos verifikasi byte sebelum dan sesudah penulisan. Penerimaan BitLife belum diuji. SHA-256: ${editedHash.take(16)}…"
+                        editStatus = "Salinan ekspor cocok byte demi byte; sumber tetap sama sebelum dan sesudah ekspor. Penerimaan BitLife belum diuji. SHA-256: ${editedHash.take(16)}…"
                     }
                 }
             } catch (e: Exception) {
