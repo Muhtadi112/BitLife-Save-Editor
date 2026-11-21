@@ -41,7 +41,7 @@ The Android manifest requests no Internet permission. File selection and export 
 
 ## CI
 
-The Alpha 0.9.3 workflow runs JVM unit tests and builds a debug APK using JDK 17 and Gradle 8.9. It does not access personal save files and does not upload save files as artifacts.
+The Alpha 0.9.3 workflow runs JVM unit tests and builds a debug APK using JDK 17 and Gradle 8.9. It does not access personal save files and does not upload save files as artifacts. The default-branch workflow was also updated to remove its previous step that fetched personal save files from Git history.
 
 ## Save privacy
 
