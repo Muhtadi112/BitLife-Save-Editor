@@ -2,7 +2,7 @@
 
 Offline Android application built with Kotlin and Jetpack Compose. Package: `com.adi.bitlifesaveeditor`.
 
-## Alpha 0.9.3 status
+## Alpha 0.9.4 status
 
 This is an experimental build. It is not a general-purpose .NET BinaryFormatter/NRBF editor.
 
@@ -12,7 +12,7 @@ Implemented in the current source:
 - Enforce a 64 MiB input limit.
 - Export an unchanged backup and compare every byte after reading it back.
 - Experimental fixed-layout Money Editor candidate for a Float64/Double balance field.
-- Reject missing source URI and reject export when the destination URI is exactly the imported source URI.
+- Before export, read the selected destination and reject unreadable targets, exact/canonical SAF URI aliases, matching SAF document identities, or destinations whose current bytes match the imported source (a conservative alias check).
 - Re-read the imported source immediately before and after backup/edit export; refuse or flag the export if the source bytes changed or became unreadable while the editor was open.
 - Reopen exported files and verify exact bytes, file length, the expected candidate value, and that bytes outside the 8-byte patch range are unchanged.
 - SHA-256 fingerprints for imported, edited, and exported copies.
@@ -41,7 +41,7 @@ The Android manifest requests no Internet permission. File selection and export 
 
 ## CI
 
-The Alpha 0.9.3 workflow runs JVM unit tests and builds a debug APK using JDK 17 and Gradle 8.9. It does not access personal save files and does not upload save files as artifacts. The default-branch workflow was also updated to remove its previous step that fetched personal save files from Git history.
+The Alpha 0.9.4 workflow runs JVM unit tests and builds a debug APK using JDK 17 and Gradle 8.9. It does not access personal save files and does not upload save files as artifacts. The default-branch workflow was also updated to remove its previous step that fetched personal save files from Git history.
 
 ## Save privacy
 
