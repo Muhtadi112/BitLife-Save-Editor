@@ -3,6 +3,7 @@ package com.adi.bitlifesaveeditor
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -59,6 +60,50 @@ private fun writeAndReadBack(context: Context, uri: Uri, expected: ByteArray): B
     val output = context.contentResolver.openOutputStream(uri) ?: return null
     output.use { it.write(expected) }
     return context.contentResolver.openInputStream(uri)?.use { readBounded(it) }
+}
+
+private fun canonicalUriString(context: Context, uri: Uri): String? =
+    runCatching {
+        context.contentResolver.canonicalize(uri)?.normalizeScheme()?.toString()
+    }.getOrNull()
+
+private fun safDocumentIdentity(context: Context, uri: Uri): SafDocumentIdentity? =
+    runCatching {
+        val authority = uri.authority ?: return@runCatching null
+        val documentId = when {
+            DocumentsContract.isTreeUri(uri) -> DocumentsContract.getTreeDocumentId(uri)
+            DocumentsContract.isDocumentUri(context, uri) -> DocumentsContract.getDocumentId(uri)
+            else -> return@runCatching null
+        }
+        SafDocumentIdentity(authority, documentId)
+    }.getOrNull()
+
+/**
+ * Before writing, read the selected destination. If it is unreadable, aliases
+ * the source URI/canonical document, or already contains the source bytes, fail
+ * closed rather than risk overwriting savedLife.data through a second URI.
+ */
+private fun canExportToNewFile(
+    context: Context,
+    sourceUriString: String?,
+    destinationUri: Uri,
+    sourceBytes: ByteArray
+): Boolean {
+    val sourceUri = sourceUriString?.let(Uri::parse) ?: return false
+    val destinationBytes = runCatching {
+        context.contentResolver.openInputStream(destinationUri)?.use { readBounded(it) }
+    }.getOrNull() ?: return false
+
+    return ExportTargetGuard.canExport(
+        sourceUri = sourceUriString,
+        destinationUri = destinationUri.toString(),
+        sourceBytes = sourceBytes,
+        destinationBytesBeforeWrite = destinationBytes,
+        sourceCanonicalUri = canonicalUriString(context, sourceUri),
+        destinationCanonicalUri = canonicalUriString(context, destinationUri),
+        sourceDocumentIdentity = safDocumentIdentity(context, sourceUri),
+        destinationDocumentIdentity = safDocumentIdentity(context, destinationUri)
+    )
 }
 
 class MainActivity : ComponentActivity() {
@@ -197,8 +242,8 @@ private fun EditorHome() {
             val currentSource = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
             if (!SourceSnapshotGuard.matches(source, currentSource)) {
                 editStatus = "Backup dibatalkan: save sumber berubah atau tidak bisa dibaca ulang sejak diimpor. Impor ulang sebelum ekspor."
-            } else if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
-                editStatus = "Backup dibatalkan: URI sumber tidak tersedia atau tujuan sama dengan save asli. Pilih file baru."
+            } else if (!canExportToNewFile(context, sourceUriString, uri, source)) {
+                editStatus = "Backup dibatalkan: tujuan tidak terbukti sebagai file baru atau berpotensi mengarah ke save asli. Pilih file baru yang bisa dibaca."
             } else try {
                 val readBack = writeAndReadBack(context, uri, source)
                 val sourceAfterExport = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
@@ -225,8 +270,8 @@ private fun EditorHome() {
             val currentSource = runCatching { readSourceSnapshot(context, sourceUriString) }.getOrNull()
             if (!SourceSnapshotGuard.matches(original, currentSource)) {
                 editStatus = "Ekspor dibatalkan: save sumber berubah atau tidak bisa dibaca ulang sejak diimpor. Impor ulang dan terapkan edit lagi."
-            } else if (!ExportTargetGuard.canExport(sourceUriString, uri.toString())) {
-                editStatus = "Ekspor dibatalkan: URI sumber tidak tersedia atau tujuan sama dengan save asli. Pilih file baru."
+            } else if (!canExportToNewFile(context, sourceUriString, uri, original)) {
+                editStatus = "Ekspor dibatalkan: tujuan tidak terbukti sebagai file baru atau berpotensi mengarah ke save asli. Pilih file baru yang bisa dibaca."
             } else try {
                 if (!BalancePatchEngine.verifyPatched(original, bytes, slot, expectedAmount)) {
                     editStatus = "Verifikasi sebelum ekspor gagal. File tidak ditulis."
