@@ -11,8 +11,9 @@ internal data class SafDocumentIdentity(
 
 /**
  * Rejects ambiguous or destructive export targets before opening an output
- * stream. The caller must read the destination first; an unreadable target is
- * not considered safe.
+ * stream. The caller must read the destination first; only a readable,
+ * zero-length destination is accepted. Existing non-empty files are never
+ * overwritten, even when their bytes differ from the imported save.
  */
 internal object ExportTargetGuard {
     fun canExport(
@@ -39,10 +40,10 @@ internal object ExportTargetGuard {
         if (sourceBytes == null || sourceBytes.isEmpty()) return false
         if (destinationBytesBeforeWrite == null) return false
 
-        // A different URI can still be an alias for the same underlying file.
-        // If its current bytes equal the imported source, refuse to risk
-        // truncating the original through a provider alias.
-        if (sourceBytes.contentEquals(destinationBytesBeforeWrite)) return false
+        // CreateDocument should return a newly-created empty document. A
+        // non-empty destination may be an unrelated user file, so fail closed
+        // instead of truncating or replacing it.
+        if (destinationBytesBeforeWrite.isNotEmpty()) return false
 
         return true
     }
