@@ -57,6 +57,15 @@ class ExportTargetGuardTest {
     }
 
     @Test
+    fun rejectsDifferentNonEmptyDestinationContents() {
+        assertFalse(
+            ExportTargetGuard.canExport(
+                sourceUri, newUri, sourceBytes, byteArrayOf(9, 8, 7)
+            )
+        )
+    }
+
+    @Test
     fun rejectsMissingUrisOrUnreadableDestination() {
         assertFalse(ExportTargetGuard.canExport(null, newUri, sourceBytes, byteArrayOf()))
         assertFalse(ExportTargetGuard.canExport(sourceUri, null, sourceBytes, byteArrayOf()))
@@ -74,15 +83,6 @@ class ExportTargetGuardTest {
         assertTrue(
             ExportTargetGuard.canExport(
                 sourceUri, newUri, sourceBytes, byteArrayOf()
-            )
-        )
-    }
-
-    @Test
-    fun allowsDifferentExistingDestinationContents() {
-        assertTrue(
-            ExportTargetGuard.canExport(
-                sourceUri, newUri, sourceBytes, byteArrayOf(9, 8, 7)
             )
         )
     }
