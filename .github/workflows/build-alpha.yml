@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -35,6 +35,13 @@ jobs:
           gradle-version: '8.9'
       - name: Run unit tests (synthetic fixtures; no personal save files)
         run: gradle --no-daemon testDebugUnitTest
+      - name: Upload JVM test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BitLifeSaveEditor-alpha-0.9.5-junit-reports
+          path: BitLifeSaveEditor/app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: warn
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
