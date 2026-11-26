@@ -35,6 +35,14 @@ class RealSaveBalanceTest {
             assertEquals("BankBalance candidate offset", expectedOffset, slot!!.offset)
             assertEquals("Decoded Finances.BankBalance value", expectedBalance, slot.value, 1e-6)
 
+            // Explicitly exercise the new Kotlin NRBF locator on each real save.
+            // This test remains opt-in so personal save bytes never enter CI.
+            val located = NrbfBalanceLocator.locate(source)
+            assertNotNull("Kotlin NRBF locator must recognize real save: $path", located)
+            assertEquals("Kotlin NRBF locator offset", expectedOffset, located!!.offset)
+            assertEquals("Kotlin NRBF locator balance", expectedBalance, located.value, 1e-6)
+            assertEquals("Locator and guarded patcher must agree", slot.offset, located.offset)
+
             val edited = BalancePatchEngine.patch(source, slot, 2_000_000_000.0)
             assertNotNull("A copied save should be patchable", edited)
             assertTrue(
