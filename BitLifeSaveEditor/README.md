@@ -38,10 +38,11 @@ Do not replace the active save. Export to a new filename, keep a separate backup
 
 ## Validation evidence
 
-- GitHub Actions run #58 for commit 2829fc8d42957237e6d83a744ae39759d4fc82cf completed successfully on 23 November 2026.
-- The testDebugUnitTest task and assembleDebug task both completed successfully.
-- The workflow uploaded BitLifeSaveEditor-alpha-0.9.5-debug-apk.
-- The optional RealSaveBalanceTest requires BITLIFE_OLD_SAVE and BITLIFE_NEW_SAVE; those variables are not supplied to public CI, so real-save regression is not established by that run.
+- GitHub Actions run #70 for commit `5d07ae45974caf08b7de2759e65a7c744fea03b5` completed successfully on 26 November 2026: https://github.com/Muhtadi112/BitLife-Save-Editor/actions/runs/45759652777
+- `testDebugUnitTest`: 38 test cases, 37 passed, 1 skipped, 0 failures, 0 errors. The skipped case is `RealSaveBalanceTest`; the two local save paths were not supplied to CI.
+- `assembleDebug` completed successfully and uploaded `BitLifeSaveEditor-alpha-0.9.6-debug-apk` (artifact ID `15089945475`).
+- Extracted APK: 16,375,680 bytes; SHA-256 `67f8283743117634a7014d1878e1a802342bea5db283fdc07651450a498d23d7`.
+- The tests for the new Kotlin NRBF locator use synthetic streams. No real BitLife save was included in CI.
 - Android 15 device installation, SAF provider behavior on a physical phone, and in-game save acceptance have not been verified.
 
 The current workflow also uploads JUnit XML reports so future runs can distinguish passed synthetic tests from skipped opt-in real-save tests.
