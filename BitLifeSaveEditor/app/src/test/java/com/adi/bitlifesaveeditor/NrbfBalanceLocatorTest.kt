@@ -176,6 +176,18 @@ class NrbfBalanceLocatorTest {
     }
 
     @Test
+    fun rejectsClassMemberCountAboveAllocationBudget() {
+        val malformed = fixture()
+        // Root class member count follows the 17-byte header, library record,
+        // "Assembly-CSharp" string, and "Life" class name.
+        malformed[48] = 0xA1.toByte()
+        malformed[49] = 0x86.toByte()
+        malformed[50] = 0x01.toByte()
+        malformed[51] = 0x00.toByte()
+        assertNull(NrbfBalanceLocator.locate(malformed))
+    }
+
+    @Test
     fun rejectsOverflowingFiveByteStringLength() {
         val malformed = fixture()
         // The first BinaryLibrary string length begins after the 17-byte header,
