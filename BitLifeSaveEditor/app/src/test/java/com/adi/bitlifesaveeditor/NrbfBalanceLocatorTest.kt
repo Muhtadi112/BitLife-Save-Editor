@@ -1,5 +1,6 @@
 package com.adi.bitlifesaveeditor
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -124,7 +125,7 @@ class NrbfBalanceLocatorTest {
 
         assertNotNull(location)
         assertEquals(12345.5, location!!.value, 0.0)
-        assertEquals(location.value, ByteBuffer.wrap(data, location.offset, 8).order(ByteOrder.LITTLE_ENDIAN).double, 0.0)
+        assertArrayEquals(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(12345.5).array(), data.copyOfRange(location.offset, location.offset + 8))
         assertEquals("Life", location.rootType)
         assertEquals("SimFinances", location.financesType)
         assertTrue(location.offset in 0 until data.size - 7)
@@ -162,7 +163,7 @@ class NrbfBalanceLocatorTest {
 
         assertNotNull(location)
         assertEquals(12345.5, location!!.value, 0.0)
-        assertEquals(location.value, ByteBuffer.wrap(data, location.offset, 8).order(ByteOrder.LITTLE_ENDIAN).double, 0.0)
+        assertArrayEquals(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(12345.5).array(), data.copyOfRange(location.offset, location.offset + 8))
     }
 
     @Test
