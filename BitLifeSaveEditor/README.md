@@ -32,7 +32,7 @@ This prototype is not yet connected to the Money Editor patch path. Its unit tes
 
 The current Android Money Editor patch path is still a fixed-layout patcher, not a complete NRBF serializer. The new read-only locator is a separate prototype and is not used to authorize edits. It validates the NRBF stream header and the expected finance metadata strings, then reads a Double at a fixed offset relative to a SimBankLoan metadata marker.
 
-Earlier development notes report that a separate read-only .NET NRBF decoder matched the candidate field to Life.Finances.<BankBalance>k__BackingField in two real save revisions. The actual save files are not present in this repository workspace or CI, so that mapping is not revalidated by the current workflow. The Kotlin unit tests use synthetic byte fixtures and do not prove compatibility with arbitrary BitLife saves.
+Earlier development notes report that a separate read-only .NET NRBF decoder matched the candidate field to Life.Finances.<BankBalance>k__BackingField in two real save revisions. The actual save files are not present in this repository workspace or CI, so that mapping is not revalidated by the current workflow. The opt-in `RealSaveBalanceTest` now checks both the fixed-layout candidate and the Kotlin NRBF locator against the two local save copies when `BITLIFE_OLD_SAVE` and `BITLIFE_NEW_SAVE` are supplied. The normal CI skips that test and uses synthetic fixtures only; this does not prove compatibility with arbitrary BitLife saves.
 
 A byte-for-byte export check proves only that the app wrote the bytes it intended to write. It does not prove that BitLife accepts the save or that the field mapping is semantically correct.
 
