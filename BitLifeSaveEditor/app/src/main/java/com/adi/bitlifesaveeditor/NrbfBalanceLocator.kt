@@ -57,6 +57,8 @@ private class Parser(private val data: ByteArray) {
         const val MAX_SAVE_BYTES = 64 * 1024 * 1024
         const val MAX_STRING_BYTES = 1024 * 1024
         const val MAX_COLLECTION_COUNT = 1_000_000
+        const val MAX_CLASS_MEMBERS = 100_000
+        const val MAX_TOTAL_MEMBERS = 250_000
         const val MAX_OBJECTS = 250_000
         const val MAX_DEPTH = 128
     }
@@ -93,6 +95,7 @@ private class Parser(private val data: ByteArray) {
     private var position = 0
     private var rootId = 0
     private var objectCount = 0
+    private var totalMemberCount = 0
 
     fun locate(): NrbfBalanceLocation? {
         if (data.size < 17 || data.size > MAX_SAVE_BYTES) return null
@@ -179,9 +182,7 @@ private class Parser(private val data: ByteArray) {
     private fun readClassWithoutTypes(depth: Int, systemClass: Boolean): ParsedValue {
         val objectId = readInt()
         val className = readString()
-        val memberCount = readCount()
-        val memberNames = List(memberCount) { readString() }
-        ensureUniqueMemberNames(memberNames)
+        val memberNames = readMemberNames()
         if (!systemClass) readInt() // library id
 
         val classMetadata = ClassMetadata(
@@ -196,9 +197,7 @@ private class Parser(private val data: ByteArray) {
     private fun readClassWithTypes(depth: Int, systemClass: Boolean): ParsedValue {
         val objectId = readInt()
         val className = readString()
-        val memberCount = readCount()
-        val memberNames = List(memberCount) { readString() }
-        ensureUniqueMemberNames(memberNames)
+        val memberNames = readMemberNames()
 
         val binaryTypes = List(memberCount) { readUnsignedByte() }
         val memberTypes = binaryTypes.map { readMemberType(it) }
@@ -207,6 +206,17 @@ private class Parser(private val data: ByteArray) {
         val classMetadata = ClassMetadata(className, memberNames, memberTypes)
         metadata[objectId] = classMetadata
         return readClassInstance(objectId, classMetadata, depth + 1)
+    }
+
+    private fun readMemberNames(): List<String> {
+        val count = readCount()
+        if (count > MAX_CLASS_MEMBERS || totalMemberCount > MAX_TOTAL_MEMBERS - count) {
+            fail("NRBF class member budget exceeded")
+        }
+        totalMemberCount += count
+        val names = List(count) { readString() }
+        ensureUniqueMemberNames(names)
+        return names
     }
 
     private fun readMemberType(binaryType: Int): MemberType {
@@ -377,17 +387,18 @@ private class Parser(private val data: ByteArray) {
         name.substringBefore(',').substringAfterLast('.').trim()
 
     private fun readString(): String {
-        var length = 0
-        var shift = 0
-        repeat(5) {
+        var length = 0L
+        for (index in 0 until 5) {
             val next = readUnsignedByte()
-            length = length or ((next and 0x7f) shl shift)
+            val payload = next and 0x7f
+            // A 32-bit 7-bit encoded length has only four usable bits in byte five.
+            if (index == 4 && payload > 0x07) fail("NRBF string length overflows Int32")
+            length = length or (payload.toLong() shl (index * 7))
             if ((next and 0x80) == 0) {
-                if (length < 0 || length > MAX_STRING_BYTES) fail("NRBF string is too large")
-                val bytes = readBytes(length)
+                if (length > MAX_STRING_BYTES) fail("NRBF string is too large")
+                val bytes = readBytes(length.toInt())
                 return String(bytes, StandardCharsets.UTF_8)
             }
-            shift += 7
         }
         fail("Malformed NRBF string length")
     }
