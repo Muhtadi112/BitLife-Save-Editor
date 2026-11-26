@@ -354,6 +354,10 @@ private class Parser(private val data: ByteArray) {
                 ParsedValue(primitiveType = primitiveType, primitiveOffset = valueOffset)
             }
             PRIMITIVE_NULL -> ParsedValue(primitiveType = primitiveType, primitiveOffset = valueOffset)
+            PRIMITIVE_STRING -> {
+                readString()
+                ParsedValue(primitiveType = primitiveType, primitiveOffset = valueOffset)
+            }
             else -> fail("Unsupported NRBF primitive type $primitiveType")
         }
     }
