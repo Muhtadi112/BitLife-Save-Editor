@@ -176,6 +176,19 @@ class NrbfBalanceLocatorTest {
     }
 
     @Test
+    fun rejectsOverflowingFiveByteStringLength() {
+        val malformed = fixture()
+        // The first BinaryLibrary string length begins after the 17-byte header,
+        // record type, and 4-byte library id.
+        malformed[22] = 0x80.toByte()
+        malformed[23] = 0x80.toByte()
+        malformed[24] = 0x80.toByte()
+        malformed[25] = 0x80.toByte()
+        malformed[26] = 0x10.toByte()
+        assertNull(NrbfBalanceLocator.locate(malformed))
+    }
+
+    @Test
     fun rejectsInvalidHeaderAndOversizedInput() {
         val invalidHeader = fixture()
         invalidHeader[0] = 9
