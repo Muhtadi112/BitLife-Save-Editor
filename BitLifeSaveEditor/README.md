@@ -24,6 +24,8 @@ Offline Android application built with Kotlin and Jetpack Compose.
 
 Alpha 0.9.6 adds a bounded, read-only Kotlin NRBF record walker for the exact object path Life.<Finances>k__BackingField -> SimFinances.<BankBalance>k__BackingField. It understands a conservative subset of common NRBF class, reference, string, array, primitive, and library records, enforces size/depth/object limits, and fails closed on unsupported records.
 
+The parser now also applies a global class-member allocation budget and rejects overflowing five-byte 7-bit string lengths. This is parser hardening only; it does not establish compatibility with a real BitLife save.
+
 This prototype is not yet connected to the Money Editor patch path. Its unit tests use synthetic NRBF streams only. It must not be treated as proof that it can parse a real BitLife save until both user-supplied save copies are tested against it. The existing Money Editor remains the fixed-layout experimental patcher described below.
 
 ## Critical Money Editor limitation
