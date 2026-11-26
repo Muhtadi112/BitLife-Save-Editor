@@ -3,7 +3,7 @@
 Offline Android application built with Kotlin and Jetpack Compose.
 
 - Package: com.adi.bitlifesaveeditor
-- Current source version: 0.9.5-alpha (versionCode 11)
+- Current source version: 0.9.6-alpha (versionCode 12)
 - Android target: API 35 (Android 15)
 - Minimum Android: API 26
 - Root: not required
@@ -20,9 +20,15 @@ Offline Android application built with Kotlin and Jetpack Compose.
 - Re-read the imported source before and after export and stop/flag the operation if the source changes.
 - Verify exported bytes, file length, expected candidate value, unchanged bytes outside the 8-byte patch range, and SHA-256.
 
+## Read-only Kotlin NRBF locator prototype
+
+Alpha 0.9.6 adds a bounded, read-only Kotlin NRBF record walker for the exact object path Life.<Finances>k__BackingField -> SimFinances.<BankBalance>k__BackingField. It understands a conservative subset of common NRBF class, reference, string, array, primitive, and library records, enforces size/depth/object limits, and fails closed on unsupported records.
+
+This prototype is not yet connected to the Money Editor patch path. Its unit tests use synthetic NRBF streams only. It must not be treated as proof that it can parse a real BitLife save until both user-supplied save copies are tested against it. The existing Money Editor remains the fixed-layout experimental patcher described below.
+
 ## Critical Money Editor limitation
 
-The current Android implementation is a fixed-layout patcher, not a complete NRBF parser or serializer. It validates the NRBF stream header and the expected finance metadata strings, then reads a Double at a fixed offset relative to a SimBankLoan metadata marker.
+The current Android Money Editor patch path is still a fixed-layout patcher, not a complete NRBF serializer. The new read-only locator is a separate prototype and is not used to authorize edits. It validates the NRBF stream header and the expected finance metadata strings, then reads a Double at a fixed offset relative to a SimBankLoan metadata marker.
 
 Earlier development notes report that a separate read-only .NET NRBF decoder matched the candidate field to Life.Finances.<BankBalance>k__BackingField in two real save revisions. The actual save files are not present in this repository workspace or CI, so that mapping is not revalidated by the current workflow. The Kotlin unit tests use synthetic byte fixtures and do not prove compatibility with arbitrary BitLife saves.
 
