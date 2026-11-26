@@ -48,6 +48,7 @@ private class Parser(private val data: ByteArray) {
         const val BINARY_SYSTEM_CLASS = 3
         const val BINARY_CLASS = 4
         const val BINARY_PRIMITIVE_ARRAY = 7
+        const val BINARY_OBJECT = 2
 
         const val PRIMITIVE_NULL = 17
         const val PRIMITIVE_STRING = 18
@@ -263,10 +264,13 @@ private class Parser(private val data: ByteArray) {
 
         val elementBinaryType = readUnsignedByte()
         val elementType = readMemberType(elementBinaryType)
-        val elementCount = lengths.fold(1L) { total, length ->
-            total * length.toLong()
+        var elementCount = 1L
+        for (length in lengths) {
+            if (length != 0 && elementCount > MAX_COLLECTION_COUNT.toLong() / length.toLong()) {
+                fail("NRBF array is too large")
+            }
+            elementCount *= length.toLong()
         }
-        if (elementCount > MAX_COLLECTION_COUNT) fail("NRBF array is too large")
 
         if (elementType.binaryType == BINARY_PRIMITIVE) {
             val primitiveType = elementType.primitiveType ?: fail("Missing array primitive type")
@@ -435,7 +439,4 @@ private class Parser(private val data: ByteArray) {
 
     private fun fail(message: String): Nothing = throw IllegalArgumentException(message)
 
-    private companion object BinaryObject {
-        const val BINARY_OBJECT = 2
-    }
 }
