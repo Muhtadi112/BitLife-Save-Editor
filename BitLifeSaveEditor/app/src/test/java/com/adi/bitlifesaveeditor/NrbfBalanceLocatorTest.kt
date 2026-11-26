@@ -124,7 +124,7 @@ class NrbfBalanceLocatorTest {
 
         assertNotNull(location)
         assertEquals(12345.5, location!!.value, 0.0)
-        assertEquals(6, data[location.offset - 1].toInt() and 0xff) // Double payload follows its metadata.
+        assertEquals(location.value, ByteBuffer.wrap(data, location.offset, 8).order(ByteOrder.LITTLE_ENDIAN).double, 0.0)
         assertEquals("Life", location.rootType)
         assertEquals("SimFinances", location.financesType)
         assertTrue(location.offset in 0 until data.size - 7)
@@ -162,7 +162,7 @@ class NrbfBalanceLocatorTest {
 
         assertNotNull(location)
         assertEquals(12345.5, location!!.value, 0.0)
-        assertEquals(6, data[location.offset - 1].toInt() and 0xff)
+        assertEquals(location.value, ByteBuffer.wrap(data, location.offset, 8).order(ByteOrder.LITTLE_ENDIAN).double, 0.0)
     }
 
     @Test
