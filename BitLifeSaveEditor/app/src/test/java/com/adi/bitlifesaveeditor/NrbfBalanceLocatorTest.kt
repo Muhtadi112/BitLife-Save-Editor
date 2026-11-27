@@ -50,7 +50,8 @@ class NrbfBalanceLocatorTest {
         includeFinancesField: Boolean = true,
         includeBankBalanceField: Boolean = true,
         appendClassWithId: Boolean = false,
-        includeArrayNoise: Boolean = false
+        includeArrayNoise: Boolean = false,
+        withoutTypes: Boolean = false
     ): ByteArray {
         val writer = Writer()
         writer.byte(0) // SerializationHeaderRecord
@@ -63,7 +64,7 @@ class NrbfBalanceLocatorTest {
         writer.int(1)
         writer.string("Assembly-CSharp")
 
-        writer.byte(5) // ClassWithMembersAndTypes: Life
+        writer.byte(if (withoutTypes) 3 else 5) // ClassWithMembers[AndTypes]: Life
         writer.int(1)
         writer.string(rootName)
         val rootMemberCount = (if (includeFinancesField) 1 else 0) + (if (includeArrayNoise) 1 else 0)
@@ -71,26 +72,34 @@ class NrbfBalanceLocatorTest {
         if (includeFinancesField) writer.string("<Finances>k__BackingField")
         if (includeArrayNoise) writer.string("Noise")
 
-        if (includeFinancesField) writer.byte(4) // BinaryType.Class
-        if (includeArrayNoise) writer.byte(5) // BinaryType.ObjectArray
+        if (!withoutTypes) {
+            if (includeFinancesField) writer.byte(4) // BinaryType.Class
+            if (includeArrayNoise) writer.byte(5) // BinaryType.ObjectArray
 
-        if (includeFinancesField) {
-            writer.string(financesClassName)
-            writer.int(1) // library id for member class type
+            if (includeFinancesField) {
+                writer.string(financesClassName)
+                writer.int(1) // library id for member class type
+            }
         }
         writer.int(1) // library id for Life class
 
         if (includeFinancesField) {
-            writer.byte(5) // ClassWithMembersAndTypes: SimFinances
+            writer.byte(if (withoutTypes) 3 else 5) // ClassWithMembers[AndTypes]: SimFinances
             writer.int(2)
             writer.string(financesClassName)
             writer.int(if (includeBankBalanceField) 1 else 0)
             if (includeBankBalanceField) {
                 writer.string(bankFieldName)
-                writer.byte(0) // BinaryType.Primitive
-                writer.byte(bankPrimitiveType)
+                if (!withoutTypes) {
+                    writer.byte(0) // BinaryType.Primitive
+                    writer.byte(bankPrimitiveType)
+                }
             }
             writer.int(1) // library id for SimFinances
+            if (withoutTypes && includeBankBalanceField) {
+                writer.byte(8) // MemberPrimitiveTyped
+                writer.byte(bankPrimitiveType)
+            }
             when (bankPrimitiveType) {
                 6 -> writer.double(12345.5)
                 9 -> writer.long(12345L)
@@ -129,6 +138,21 @@ class NrbfBalanceLocatorTest {
         assertEquals("Life", location.rootType)
         assertEquals("SimFinances", location.financesType)
         assertTrue(location.offset in 0 until data.size - 7)
+    }
+
+    @Test
+    fun locatesDoubleInClassWithMembersRecordsWithoutTypeMetadata() {
+        val data = fixture(withoutTypes = true)
+        val location = NrbfBalanceLocator.locate(data)
+
+        assertNotNull(location)
+        assertEquals(12345.5, location!!.value, 0.0)
+        assertEquals("Life", location.rootType)
+        assertEquals("SimFinances", location.financesType)
+        assertArrayEquals(
+            ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(12345.5).array(),
+            data.copyOfRange(location.offset, location.offset + 8)
+        )
     }
 
     @Test
