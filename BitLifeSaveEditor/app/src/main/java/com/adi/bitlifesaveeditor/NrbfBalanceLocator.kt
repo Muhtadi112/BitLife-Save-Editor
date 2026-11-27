@@ -188,7 +188,7 @@ private class Parser(private val data: ByteArray) {
         val classMetadata = ClassMetadata(
             className = className,
             memberNames = memberNames,
-            memberTypes = List(memberCount) { MemberType(BINARY_OBJECT) }
+            memberTypes = List(memberNames.size) { MemberType(BINARY_OBJECT) }
         )
         metadata[objectId] = classMetadata
         return readClassInstance(objectId, classMetadata, depth + 1)
@@ -199,7 +199,7 @@ private class Parser(private val data: ByteArray) {
         val className = readString()
         val memberNames = readMemberNames()
 
-        val binaryTypes = List(memberCount) { readUnsignedByte() }
+        val binaryTypes = List(memberNames.size) { readUnsignedByte() }
         val memberTypes = binaryTypes.map { readMemberType(it) }
         if (!systemClass) readInt() // library id
 
