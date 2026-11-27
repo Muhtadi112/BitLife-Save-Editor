@@ -40,11 +40,12 @@ Do not replace the active save. Export to a new filename, keep a separate backup
 
 ## Validation evidence
 
-- GitHub Actions run #70 for commit `5d07ae45974caf08b7de2759e65a7c744fea03b5` completed successfully on 26 November 2026: https://github.com/Muhtadi112/BitLife-Save-Editor/actions/runs/45759652777
-- `testDebugUnitTest`: 38 test cases, 37 passed, 1 skipped, 0 failures, 0 errors. The skipped case is `RealSaveBalanceTest`; the two local save paths were not supplied to CI.
-- `assembleDebug` completed successfully and uploaded `BitLifeSaveEditor-alpha-0.9.6-debug-apk` (artifact ID `15089945475`).
-- Extracted APK: 16,375,680 bytes; SHA-256 `67f8283743117634a7014d1878e1a802342bea5db283fdc07651450a498d23d7`.
-- The tests for the new Kotlin NRBF locator use synthetic streams. No real BitLife save was included in CI.
+- GitHub Actions run #83 for commit `3a1041020adffea9a7fdac64e63912799b9755ce` completed successfully on 27 November 2026: https://github.com/Muhtadi112/BitLife-Save-Editor/actions/runs/45944826016
+- `testDebugUnitTest`: 41 test cases, 40 passed, 1 skipped, 0 failures, 0 errors. The skipped case is `RealSaveBalanceTest`; no personal save paths were supplied to CI.
+- `assembleDebug` completed successfully and uploaded `BitLifeSaveEditor-alpha-0.9.7-debug-apk` (artifact ID `15173983563`).
+- Extracted APK: 16,375,684 bytes; SHA-256 `3fa634763bba190cacd1932cbd60b08c359951e570024593af91f71c5863e7db`.
+- The Kotlin NRBF locator tests use synthetic streams only. No real BitLife save was included in CI.
+- The APK manifest declares target SDK 35 / min SDK 26 and contains no `android.permission.INTERNET` request.
 - Android 15 device installation, SAF provider behavior on a physical phone, and in-game save acceptance have not been verified.
 
 The current workflow also uploads JUnit XML reports so future runs can distinguish passed synthetic tests from skipped opt-in real-save tests. Alpha 0.9.7 must pass a fresh CI run before its APK is considered buildable.
