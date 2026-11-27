@@ -449,6 +449,6 @@ private fun EditorHome() {
         }
         Text(editStatus, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
-        Text("ADI LABS · ALPHA 0.9.6 · READ-ONLY NRBF PROTOTYPE / GAME TEST PENDING", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("ADI LABS · ALPHA 0.9.7 · READ-ONLY NRBF PROTOTYPE / GAME TEST PENDING", color = Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
