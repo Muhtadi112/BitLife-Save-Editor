@@ -3,7 +3,7 @@
 Offline Android application built with Kotlin and Jetpack Compose.
 
 - Package: com.adi.bitlifesaveeditor
-- Current source version: 0.9.7-alpha (versionCode 13)
+- Current source version: 0.9.8-alpha (versionCode 14)
 - Android target: API 35 (Android 15)
 - Minimum Android: API 26
 - Root: not required
@@ -22,11 +22,11 @@ Offline Android application built with Kotlin and Jetpack Compose.
 
 ## Read-only Kotlin NRBF locator prototype
 
-Alpha 0.9.7 carries a bounded, read-only Kotlin NRBF record walker for the exact object path Life.<Finances>k__BackingField -> SimFinances.<BankBalance>k__BackingField. It understands a conservative subset of common NRBF class, reference, string, array, primitive, and library records, enforces size/depth/object limits, and fails closed on unsupported records.
+Alpha 0.9.8 carries a bounded, read-only Kotlin NRBF record walker for the exact object path Life.<Finances>k__BackingField -> SimFinances.<BankBalance>k__BackingField. It understands a conservative subset of common NRBF class, reference, string, array, primitive, and library records, enforces size/depth/object limits, and fails closed on unsupported records.
 
 The parser now also applies a global class-member allocation budget and rejects overflowing five-byte 7-bit string lengths. This is parser hardening only; it does not establish compatibility with a real BitLife save.
 
-Alpha 0.9.7 fixes the parser's member-count references for ClassWithMembers and ClassWithMembersAndTypes and adds a synthetic fixture for the no-type-metadata form. This source correction has not yet passed CI at the time of this commit. The prototype is not yet connected to the Money Editor patch path. Its unit tests use synthetic NRBF streams only. It must not be treated as proof that it can parse a real BitLife save until both user-supplied save copies are tested against it. The existing Money Editor remains the fixed-layout experimental patcher described below.
+Alpha 0.9.8 hardens NRBF string handling: malformed UTF-8 is rejected instead of being silently replaced, and overlong/non-canonical 7-bit encoded string lengths are rejected. Two synthetic regression tests cover these cases. This source change must pass a fresh CI run before the new APK is considered buildable. The prototype is not yet connected to the Money Editor patch path. Its unit tests use synthetic NRBF streams only. It must not be treated as proof that it can parse a real BitLife save until both user-supplied save copies are tested against it. The existing Money Editor remains the fixed-layout experimental patcher described below.
 
 ## Critical Money Editor limitation
 
@@ -48,7 +48,7 @@ Do not replace the active save. Export to a new filename, keep a separate backup
 - The APK manifest declares target SDK 35 / min SDK 26 and contains no `android.permission.INTERNET` request.
 - Android 15 device installation, SAF provider behavior on a physical phone, and in-game save acceptance have not been verified.
 
-The current workflow also uploads JUnit XML reports so future runs can distinguish passed synthetic tests from skipped opt-in real-save tests. Alpha 0.9.7 must pass a fresh CI run before its APK is considered buildable.
+The current workflow also uploads JUnit XML reports so future runs can distinguish passed synthetic tests from skipped opt-in real-save tests. Alpha 0.9.8 must pass a fresh CI run before its APK is considered buildable.
 
 ## Features
 

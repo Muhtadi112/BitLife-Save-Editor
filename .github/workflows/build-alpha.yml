@@ -1,4 +1,4 @@
-name: Build BitLife Save Editor Alpha 0.9.7
+name: Build BitLife Save Editor Alpha 0.9.8
 
 on:
   push:
@@ -39,13 +39,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BitLifeSaveEditor-alpha-0.9.7-junit-reports
+          name: BitLifeSaveEditor-alpha-0.9.8-junit-reports
           path: BitLifeSaveEditor/app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: BitLifeSaveEditor-alpha-0.9.7-debug-apk
+          name: BitLifeSaveEditor-alpha-0.9.8-debug-apk
           path: BitLifeSaveEditor/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

@@ -1,5 +1,8 @@
 package com.adi.bitlifesaveeditor
 
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
 /**
@@ -395,12 +398,24 @@ private class Parser(private val data: ByteArray) {
             if (index == 4 && payload > 0x07) fail("NRBF string length overflows Int32")
             length = length or (payload.toLong() shl (index * 7))
             if ((next and 0x80) == 0) {
+                if (index > 0 && payload == 0) fail("Non-canonical NRBF string length")
                 if (length > MAX_STRING_BYTES) fail("NRBF string is too large")
-                val bytes = readBytes(length.toInt())
-                return String(bytes, StandardCharsets.UTF_8)
+                return decodeUtf8(readBytes(length.toInt()))
             }
         }
         fail("Malformed NRBF string length")
+    }
+
+    private fun decodeUtf8(bytes: ByteArray): String {
+        return try {
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString()
+        } catch (_: CharacterCodingException) {
+            fail("Malformed NRBF UTF-8 string")
+        }
     }
 
     private fun readCount(): Int {

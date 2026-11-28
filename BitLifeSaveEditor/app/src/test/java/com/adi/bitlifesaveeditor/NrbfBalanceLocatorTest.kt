@@ -225,6 +225,25 @@ class NrbfBalanceLocatorTest {
     }
 
     @Test
+    fun rejectsMalformedUtf8MetadataStrings() {
+        val malformed = fixture()
+        // The first BinaryLibrary string payload begins at byte 23.
+        malformed[23] = 0xff.toByte()
+        assertNull(NrbfBalanceLocator.locate(malformed))
+    }
+
+    @Test
+    fun rejectsNonCanonicalSevenBitStringLength() {
+        val valid = fixture()
+        val malformed = ByteArray(valid.size + 1)
+        valid.copyOfRange(0, 22).copyInto(malformed, 0)
+        malformed[22] = 0x8f.toByte()
+        malformed[23] = 0x00
+        valid.copyOfRange(23, valid.size).copyInto(malformed, 24)
+        assertNull(NrbfBalanceLocator.locate(malformed))
+    }
+
+    @Test
     fun rejectsInvalidHeaderAndOversizedInput() {
         val invalidHeader = fixture()
         invalidHeader[0] = 9
